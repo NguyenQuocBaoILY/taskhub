@@ -1,0 +1,54 @@
+﻿using Amazon;
+using Amazon.DynamoDBv2;
+using Amazon.DynamoDBv2.DataModel;
+using Amazon.Runtime;
+using BLL.Services;
+using DAL.Interfaces;
+using DAL.Repositories;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Hosting;
+
+var builder = WebApplication.CreateBuilder(args);
+
+// Lấy cấu hình AWS từ appsettings.json
+var awsConfig = builder.Configuration.GetSection("AWS");
+var serviceUrl = awsConfig["ServiceURL"];
+var region = awsConfig["Region"];
+var accessKey = awsConfig["AccessKey"];
+var secretKey = awsConfig["SecretKey"];
+
+// Tạo AWS Credentials cho DynamoDB Local
+var credentials = new BasicAWSCredentials(accessKey, secretKey);
+var clientConfig = new AmazonDynamoDBConfig
+{
+    ServiceURL = serviceUrl, // local DynamoDB
+};
+
+// Đăng ký DynamoDB Client
+builder.Services.AddSingleton<IAmazonDynamoDB>(sp => new AmazonDynamoDBClient(credentials, clientConfig));
+
+// Đăng ký Repository và Service
+builder.Services.AddSingleton<ITaskRepository, TaskRepository>();
+builder.Services.AddSingleton<TaskService>();
+
+// Controllers + Swagger
+builder.Services.AddControllers();
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen();
+
+var app = builder.Build();
+
+// Chỉ bật Swagger khi dev
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI();
+}
+
+app.UseHttpsRedirection();
+app.UseAuthorization();
+app.MapControllers();
+
+app.Run();
