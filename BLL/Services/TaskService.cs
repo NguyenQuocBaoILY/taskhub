@@ -27,7 +27,7 @@ namespace BLL.Services
 
         public async Task<TaskModel> UpdateTaskAsync(TaskModel task)
         {
-            // TODO: validate task nếu cần
+            // TODO: validate task 
             return await _taskRepository.UpdateTaskAsync(task);
         }
 
