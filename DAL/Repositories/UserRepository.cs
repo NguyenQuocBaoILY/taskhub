@@ -155,5 +155,39 @@ namespace DAL.Repositories
             await _context.SaveAsync(user);
             return true;
         }
+
+        // Search users for FE. If query is null/empty, returns up to 'limit' users (scan).
+        public async Task<IEnumerable<UserModel>> SearchUsersAsync(string query = null, int limit = 50)
+        {
+            if (string.IsNullOrEmpty(query))
+            {
+                var scanConfig = new ScanOperationConfig
+                {
+                    Limit = limit
+                };
+
+                var searchAll = _context.FromScanAsync<UserModel>(scanConfig);
+                return await searchAll.GetRemainingAsync();
+            }
+
+            var q = query.ToLower();
+
+            var scanConfigWithFilter = new ScanOperationConfig
+            {
+                FilterExpression = new Expression
+                {
+                    // search in LowerUsername, Username or Name (case-insensitive via LowerUsername)
+                    ExpressionStatement = "contains(LowerUsername, :q) OR contains(Username, :q) OR contains(Name, :q)",
+                    ExpressionAttributeValues = new Dictionary<string, DynamoDBEntry>
+                    {
+                        { ":q", q }
+                    }
+                },
+                Limit = limit
+            };
+
+            var search = _context.FromScanAsync<UserModel>(scanConfigWithFilter);
+            return await search.GetRemainingAsync();
+        }
     }
 }

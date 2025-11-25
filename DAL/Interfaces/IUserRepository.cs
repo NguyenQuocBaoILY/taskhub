@@ -1,4 +1,5 @@
 using DAL.Entities;
+using System.Collections.Generic;
 using System.Threading.Tasks;
 
 namespace DAL.Interfaces
@@ -14,5 +15,8 @@ namespace DAL.Interfaces
         Task<bool> IsEmailExistsAsync(string email);
         Task<bool> UpdateFailedLoginAttemptsAsync(string userId, int attempts, string lockedUntil = null);
         Task<bool> UpdateLastLoginAsync(string userId, string ipAddress, string userAgent);
+
+        // Search / list users for FE (query optional). Returns up to 'limit' items.
+        Task<IEnumerable<UserModel>> SearchUsersAsync(string query = null, int limit = 50);
     }
 }
