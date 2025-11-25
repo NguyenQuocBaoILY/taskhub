@@ -7,10 +7,10 @@ namespace DAL.Entities
     [DynamoDBTable("TaskHub-Core")]
     public class TaskModel
     {
-        [DynamoDBHashKey]  // Partition Key
+        [DynamoDBHashKey]
         public string PK { get; set; }
 
-        [DynamoDBRangeKey] // Sort Key
+        [DynamoDBRangeKey]
         public string SK { get; set; }
 
         [DynamoDBProperty]
@@ -26,13 +26,13 @@ namespace DAL.Entities
         public string Description { get; set; }
 
         [DynamoDBProperty]
-        public string Status { get; set; } // TODO, IN_PROGRESS, DONE...
+        public string Status { get; set; }
 
         [DynamoDBProperty]
-        public string Type { get; set; }   // STORY, BUG, TASK, ...
+        public string Type { get; set; }
 
         [DynamoDBProperty]
-        public string Priority { get; set; } // LOWEST → HIGHEST
+        public string Priority { get; set; }
 
         [DynamoDBProperty]
         public string Assignee { get; set; }
