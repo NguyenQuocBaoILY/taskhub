@@ -5,10 +5,13 @@ using Amazon.Runtime;
 using BLL.Services;
 using DAL.Interfaces;
 using DAL.Repositories;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.IdentityModel.Tokens;
+using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,9 +40,31 @@ builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 
 // Đăng ký Repository và Service
 builder.Services.AddSingleton<ITaskRepository, TaskRepository>();
-builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddSingleton<TaskService>();
-builder.Services.AddScoped<ProjectService>();
+
+// JWT Authentication Configuration
+var jwtSettings = builder.Configuration.GetSection("JWT");
+var jwtSecretKey = jwtSettings["SecretKey"] ?? "your-super-secret-jwt-key-here-make-it-long-enough-minimum-32-characters";
+
+builder.Services.AddAuthentication(options =>
+{
+    options.DefaultAuthenticateScheme = JwtBearerDefaults.AuthenticationScheme;
+    options.DefaultChallengeScheme = JwtBearerDefaults.AuthenticationScheme;
+})
+.AddJwtBearer(options =>
+{
+    options.TokenValidationParameters = new TokenValidationParameters
+    {
+        ValidateIssuer = true,
+        ValidateAudience = true,
+        ValidateLifetime = true,
+        ValidateIssuerSigningKey = true,
+        ValidIssuer = jwtSettings["Issuer"] ?? "TaskHub",
+        ValidAudience = jwtSettings["Audience"] ?? "TaskHub",
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecretKey)),
+        ClockSkew = TimeSpan.Zero
+    };
+});
 
 // Controllers + Swagger
 builder.Services.AddControllers();
@@ -66,10 +91,7 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-// KHÔNG bắt buộc phải dùng HTTPS khi bạn đang test HTTP
-// app.UseHttpsRedirection();
-
-app.UseCors();          // <- phải trước UseAuthorization
+app.UseHttpsRedirection();
 app.UseAuthorization();
 
 app.MapControllers();
