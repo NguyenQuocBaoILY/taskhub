@@ -1,6 +1,6 @@
 ﻿using Amazon;
 using Amazon.DynamoDBv2;
-using Amazon.DynamoDBv2.DataModel;
+using Amazon.DynamoDBv2.DataModel; 
 using Amazon.Runtime;
 using BLL.Services;
 using DAL.Interfaces;
@@ -29,9 +29,17 @@ var clientConfig = new AmazonDynamoDBConfig
 // Đăng ký DynamoDB Client
 builder.Services.AddSingleton<IAmazonDynamoDB>(sp => new AmazonDynamoDBClient(credentials, clientConfig));
 
+builder.Services.AddSingleton<IDynamoDBContext>(sp =>
+{
+    var client = sp.GetRequiredService<IAmazonDynamoDB>();
+    return new DynamoDBContext(client);
+});
+
 // Đăng ký Repository và Service
 builder.Services.AddSingleton<ITaskRepository, TaskRepository>();
+builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddSingleton<TaskService>();
+builder.Services.AddScoped<ProjectService>();
 
 // Controllers + Swagger
 builder.Services.AddControllers();
