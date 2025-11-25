@@ -38,6 +38,17 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
+// CORS
+builder.Services.AddCors(options =>
+{
+    options.AddDefaultPolicy(policy =>
+    {
+        policy.WithOrigins("http://localhost:5173")
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+});
+
 var app = builder.Build();
 
 // Chỉ bật Swagger khi dev
@@ -47,8 +58,12 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
-app.UseHttpsRedirection();
+// KHÔNG bắt buộc phải dùng HTTPS khi bạn đang test HTTP
+// app.UseHttpsRedirection();
+
+app.UseCors();          // <- phải trước UseAuthorization
 app.UseAuthorization();
+
 app.MapControllers();
 
 app.Run();
