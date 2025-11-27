@@ -1,12 +1,16 @@
-﻿using DAL.Entities;
-using DAL.Interfaces;
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Threading.Tasks;
 using Amazon.DynamoDBv2.DataModel;
+using Amazon.DynamoDBv2.DocumentModel;
+using DAL.Entities;
+using DAL.Interfaces;
 
 namespace DAL.Repositories
 {
     public class ProjectRepository : IProjectRepository
     {
-
         private readonly IDynamoDBContext _context;
 
         public ProjectRepository(IDynamoDBContext context)
@@ -63,7 +67,31 @@ namespace DAL.Repositories
 
             await _context.SaveAsync(project);
             return project;
+        }
 
+        // New: scan to find project by projectId only (inefficient for large tables)
+        public async Task<ProjectModel?> GetProjectByIdAsync(string projectId)
+        {
+            if (string.IsNullOrEmpty(projectId)) return null;
+
+            var sk = BuildSk(projectId);
+
+            var scanConfig = new ScanOperationConfig
+            {
+                FilterExpression = new Expression
+                {
+                    ExpressionStatement = "SK = :sk",
+                    ExpressionAttributeValues = new Dictionary<string, DynamoDBEntry>
+                    {
+                        { ":sk", sk }
+                    }
+                },
+                Limit = 1
+            };
+
+            var search = _context.FromScanAsync<ProjectModel>(scanConfig);
+            var results = await search.GetRemainingAsync();
+            return results.FirstOrDefault();
         }
     }
 }

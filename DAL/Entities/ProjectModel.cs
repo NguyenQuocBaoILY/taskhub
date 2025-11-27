@@ -39,7 +39,7 @@ namespace DAL.Entities
         [DynamoDBProperty]
         public string Status { get; set; }
 
-        // PRIVATE / PUBLIC
+        // PRIVATE / PUBLIC / INTERNAL
         [DynamoDBProperty]
         public string Visibility { get; set; }
 
@@ -57,12 +57,21 @@ namespace DAL.Entities
         [DynamoDBProperty]
         public int MemberCount { get; set; }
 
+        // New fields required by controller / UI
+        [DynamoDBProperty]
+        public string Priority { get; set; }
+
+        [DynamoDBProperty]
+        public string StartDate { get; set; }
+
+        [DynamoDBProperty]
+        public string EndDate { get; set; }
+
         [DynamoDBProperty]
         public string CreatedAt { get; set; }
 
         [DynamoDBProperty]
         public string UpdatedAt { get; set; }
-
 
         // Query Project theo Owner (My Projects)
         [DynamoDBGlobalSecondaryIndexHashKey("GSI4PK")]

@@ -1,6 +1,6 @@
 ﻿using Amazon;
 using Amazon.DynamoDBv2;
-using Amazon.DynamoDBv2.DataModel; 
+using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
 using BLL.Services;
 using DAL.Interfaces;
@@ -42,6 +42,20 @@ builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 builder.Services.AddSingleton<ITaskRepository, TaskRepository>();
 builder.Services.AddSingleton<TaskService>();
 
+// Repositories used across services
+builder.Services.AddSingleton<IUserRepository, UserRepository>();
+builder.Services.AddSingleton<IAuthSessionRepository, AuthSessionRepository>();
+builder.Services.AddSingleton<IProjectMemberRepository, ProjectMemberRepository>();
+
+// ----- ADD: register project repository + service so Project CRUD works -----
+builder.Services.AddSingleton<IProjectRepository, ProjectRepository>();
+builder.Services.AddSingleton<ProjectService>();
+// ---------------------------------------------------------------------------
+
+// Business services
+builder.Services.AddSingleton<AuthService>();
+builder.Services.AddSingleton<ProjectMemberService>();
+
 // JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("JWT");
 var jwtSecretKey = jwtSettings["SecretKey"] ?? "your-super-secret-jwt-key-here-make-it-long-enough-minimum-32-characters";
@@ -71,14 +85,15 @@ builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
-// CORS
+// Add CORS services
 builder.Services.AddCors(options =>
 {
-    options.AddDefaultPolicy(policy =>
+    options.AddPolicy("AllowFrontend", policy =>
     {
-        policy.WithOrigins("http://localhost:5173")
-              .AllowAnyMethod()
-              .AllowAnyHeader();
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+                      .AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .AllowCredentials();
     });
 });
 
@@ -91,7 +106,10 @@ if (app.Environment.IsDevelopment())
     app.UseSwaggerUI();
 }
 
+// Add CORS middleware - must come before authentication and authorization
+app.UseCors("AllowFrontend");
 app.UseHttpsRedirection();
+app.UseAuthentication();
 app.UseAuthorization();
 
 app.MapControllers();

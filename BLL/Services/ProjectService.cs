@@ -41,6 +41,10 @@ namespace BLL.Services
             return await _projectRepository.GetProjectAsync(orgId, projectId);
         }
 
-
+        // New: find project by projectId alone
+        public async Task<ProjectModel?> GetProjectByIdAsync(string projectId)
+        {
+            return await _projectRepository.GetProjectByIdAsync(projectId);
+        }
     }
 }

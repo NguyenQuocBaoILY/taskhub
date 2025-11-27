@@ -15,5 +15,8 @@ namespace DAL.Interfaces
         Task<ProjectModel> UpdateProjectAsync(ProjectModel project);
 
         Task<bool> DeleteProjectAsync(string orgId, string projectId);
+
+        // New: find project when only projectId is known (uses Scan; not optimal for large tables)
+        Task<ProjectModel?> GetProjectByIdAsync(string projectId);
     }
 }
