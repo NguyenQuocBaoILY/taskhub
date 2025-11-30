@@ -55,6 +55,7 @@ builder.Services.AddSingleton<ProjectService>();
 // Business services
 builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<ProjectMemberService>();
+builder.Services.AddScoped<UserService>();
 
 // JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("JWT");

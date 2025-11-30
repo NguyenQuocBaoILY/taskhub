@@ -1,4 +1,4 @@
-using Amazon.DynamoDBv2;
+﻿using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.DynamoDBv2.DocumentModel;
 using DAL.Entities;
@@ -157,37 +157,26 @@ namespace DAL.Repositories
         }
 
         // Search users for FE. If query is null/empty, returns up to 'limit' users (scan).
-        public async Task<IEnumerable<UserModel>> SearchUsersAsync(string query = null, int limit = 50)
+        public async Task<IEnumerable<UserModel>> SearchUsersAsync(string query, int limit)
         {
-            if (string.IsNullOrEmpty(query))
-            {
-                var scanConfig = new ScanOperationConfig
-                {
-                    Limit = limit
-                };
+            // 1. Scan toàn bộ item map với UserModel (không điều kiện gì)
+            var search = _context.ScanAsync<UserModel>(new List<ScanCondition>());
+            var allUsers = await search.GetRemainingAsync();
 
-                var searchAll = _context.FromScanAsync<UserModel>(scanConfig);
-                return await searchAll.GetRemainingAsync();
-            }
+            // 2. Nếu không có query => trả limit đầu tiên
+            if (string.IsNullOrWhiteSpace(query))
+                return allUsers.Take(limit);
 
-            var q = query.ToLower();
+            query = query.Trim();
 
-            var scanConfigWithFilter = new ScanOperationConfig
-            {
-                FilterExpression = new Expression
-                {
-                    // search in LowerUsername, Username or Name (case-insensitive via LowerUsername)
-                    ExpressionStatement = "contains(LowerUsername, :q) OR contains(Username, :q) OR contains(Name, :q)",
-                    ExpressionAttributeValues = new Dictionary<string, DynamoDBEntry>
-                    {
-                        { ":q", q }
-                    }
-                },
-                Limit = limit
-            };
+            // 3. Lọc bằng C# theo Name (hoặc DisplayName tùy bạn)
+            var filtered = allUsers
+                .Where(u => !string.IsNullOrEmpty(u.Name) &&
+                            u.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                .Take(limit)
+                .ToList();
 
-            var search = _context.FromScanAsync<UserModel>(scanConfigWithFilter);
-            return await search.GetRemainingAsync();
+            return filtered;
         }
     }
 }

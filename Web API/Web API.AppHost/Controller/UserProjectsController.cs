@@ -1,22 +1,25 @@
+using Amazon.DynamoDBv2.DocumentModel;
 using BLL.Services;
+using DAL.Entities;
 using DAL.Interfaces;
+using k8s.KubeConfigModels;
 using Microsoft.AspNetCore.Mvc;
 using System.Linq;
 using System.Threading.Tasks;
 
-namespace Web_API.AppHost.Controllers
+namespace API.Controller
 {
     [ApiController]
     [Route("api/users")]
     public class UsersController : ControllerBase
     {
         private readonly ProjectMemberService _projectMemberService;
-        private readonly IUserRepository _userRepository;
+        private readonly UserService _userService;
 
-        public UsersController(ProjectMemberService projectMemberService, IUserRepository userRepository)
+        public UsersController(ProjectMemberService projectMemberService, UserService userService)
         {
             _projectMemberService = projectMemberService;
-            _userRepository = userRepository;
+            _userService = userService;
         }
 
         // GET /api/users/{userId}/projects
@@ -33,12 +36,14 @@ namespace Web_API.AppHost.Controllers
         // GET /api/users?query={q}&limit={n}
         // Returns list of users for FE selection (userId, username, name, avatar).
         [HttpGet]
-        public async Task<IActionResult> SearchUsers([FromQuery] string query = null, [FromQuery] int limit = 50)
+        public async Task<IActionResult> SearchUsers(
+            [FromQuery] string query = null,
+            [FromQuery] int limit = 50)
         {
             if (limit <= 0) limit = 50;
             if (limit > 200) limit = 200; // safety cap
 
-            var users = await _userRepository.SearchUsersAsync(query, limit);
+            var users = await _userService.SearchUsersAsync(query, limit);
 
             var result = users?.Select(u => new
             {
@@ -51,5 +56,6 @@ namespace Web_API.AppHost.Controllers
 
             return Ok(result);
         }
+
     }
 }

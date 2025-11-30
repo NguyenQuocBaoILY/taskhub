@@ -21,45 +21,21 @@ namespace DAL.Entities
         [DynamoDBProperty]
         public string ProjectId { get; set; }
 
-        // Project thuộc Organization nào
-        [DynamoDBProperty]
-        public string OrgId { get; set; }
-
         [DynamoDBProperty]
         public string Name { get; set; }
-
-        // Ví dụ: CRM, TASKHUB, SHOP, MOBILE
-        [DynamoDBProperty]
-        public string Key { get; set; }
 
         [DynamoDBProperty]
         public string Description { get; set; }
 
-        // ACTIVE / ARCHIVED
-        [DynamoDBProperty]
-        public string Status { get; set; }
-
-        // PRIVATE / PUBLIC / INTERNAL
-        [DynamoDBProperty]
-        public string Visibility { get; set; }
-
         // USER#ABC
         [DynamoDBProperty]
         public string OwnerUserId { get; set; }
-
-        // URL avatar (optional)
-        [DynamoDBProperty]
-        public string Avatar { get; set; }
 
         [DynamoDBProperty]
         public int TaskCount { get; set; }
 
         [DynamoDBProperty]
         public int MemberCount { get; set; }
-
-        // New fields required by controller / UI
-        [DynamoDBProperty]
-        public string Priority { get; set; }
 
         [DynamoDBProperty]
         public string StartDate { get; set; }

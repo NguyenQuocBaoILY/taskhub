@@ -1,4 +1,4 @@
-using DAL.Entities;
+﻿using DAL.Entities;
 using DAL.Interfaces;
 using System;
 using System.Collections.Generic;
@@ -30,6 +30,7 @@ namespace BLL.Services
         }
 
         // GET /api/users/{userId}/projects
+        // Lấy tất cả các project mà user là member
         public async Task<IEnumerable<ProjectMemberModel>> GetUserProjectsAsync(string userId, int limit = 100)
         {
             if (string.IsNullOrEmpty(userId)) return Enumerable.Empty<ProjectMemberModel>();
@@ -50,6 +51,7 @@ namespace BLL.Services
         }
 
         // GET /api/projects/{projectId}/members/{userId}
+        // Lấy thông tin member cụ thể trong project
         public async Task<ProjectMemberModel> GetProjectMemberAsync(string projectId, string userId)
         {
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId)) return null;
@@ -64,6 +66,7 @@ namespace BLL.Services
         }
 
         // GET /api/projects/{projectId}/members
+        // Lấy tất cả member trong project
         public async Task<IEnumerable<ProjectMemberModel>> GetProjectMembersAsync(string projectId, int limit = 100)
         {
             if (string.IsNullOrEmpty(projectId)) return Enumerable.Empty<ProjectMemberModel>();
@@ -89,12 +92,22 @@ namespace BLL.Services
 
         // POST /api/projects/{projectId}/members
         // request: ProjectMemberModel with UserId & Role populated
+        // Thêm member mới vào project
         public async Task<ProjectMemberModel> AddMemberAsync(string projectId, ProjectMemberModel request, string addedBy = null)
         {
-            if (string.IsNullOrEmpty(projectId)) throw new ArgumentException("projectId is required", nameof(projectId));
-            if (request == null) throw new ArgumentNullException(nameof(request));
-            if (string.IsNullOrEmpty(request.UserId) || string.IsNullOrEmpty(request.Role))
-                throw new ArgumentException("userId and role are required");
+            if (string.IsNullOrEmpty(projectId))
+                throw new ArgumentException("projectId is required", nameof(projectId));
+
+            if (request == null)
+                throw new ArgumentNullException(nameof(request));
+
+            if (string.IsNullOrEmpty(request.UserId))
+                throw new ArgumentException("userId is required");
+
+            // 👇 Set mặc định role = MEMBER nếu client không gửi
+            var role = string.IsNullOrWhiteSpace(request.Role)
+                ? "MEMBER"
+                : request.Role;
 
             var now = DateTime.UtcNow.ToString("o");
 
@@ -102,13 +115,14 @@ namespace BLL.Services
             {
                 ProjectId = projectId,
                 UserId = request.UserId,
-                Role = request.Role,
+                Role = role,                              
                 MemberStatus = request.MemberStatus ?? "ACTIVE",
                 JoinedAt = now,
                 AddedBy = addedBy,
                 CreatedAt = now,
                 UpdatedAt = now,
-                Permissions = request.Permissions ?? ExpandPermissions(request.Role)
+                Permissions = request.Permissions
+                               ?? ExpandPermissions(role)       
             };
 
             member = await _repo.AddOrUpdateMemberAsync(member);
@@ -119,7 +133,9 @@ namespace BLL.Services
             return copy;
         }
 
+
         // PATCH /api/projects/{projectId}/members/{userId}
+        // Cập nhật thông tin member trong project
         public async Task<bool> PatchMemberAsync(string projectId, string userId, string role = null, string memberStatus = null)
         {
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId)) return false;
@@ -142,6 +158,7 @@ namespace BLL.Services
         }
 
         // DELETE /api/projects/{projectId}/members/{userId}
+        // Xóa member khỏi project
         public async Task<bool> DeleteMemberAsync(string projectId, string userId)
         {
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId)) return false;

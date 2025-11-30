@@ -16,173 +16,122 @@ namespace Web_API.AppHost.Controllers
     {
         private readonly ProjectService _projectService;
         private readonly ProjectMemberService _projectMemberService;
-        private readonly IUserRepository _userRepository;
+        private readonly UserService _userService;
 
-        public ProjectsController(ProjectService projectService, ProjectMemberService projectMemberService, IUserRepository userRepository)
+        public ProjectsController(ProjectService projectService, ProjectMemberService projectMemberService, UserService userService)
         {
             _projectService = projectService ?? throw new ArgumentNullException(nameof(projectService));
             _projectMemberService = projectMemberService ?? throw new ArgumentNullException(nameof(projectMemberService));
-            _userRepository = userRepository ?? throw new ArgumentNullException(nameof(userRepository));
+            _userService = userService ?? throw new ArgumentNullException(nameof(userService));
         }
 
         // GET /api/projects?orgId=...&status=...
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProjectModel>>> GetProjects([FromQuery] string orgId, [FromQuery] string? status)
+        public async Task<ActionResult<IEnumerable<ProjectModel>>> GetProjects([FromQuery] string? search)
         {
-            if (string.IsNullOrEmpty(orgId))
-                return BadRequest(new { message = "orgId is required" });
-
-            var projects = await _projectService.ListProjectsAsync(orgId, status);
+            var projects = await _projectService.ListProjectsAsync(search);
             return Ok(projects);
         }
 
-        // Existing: GET /api/projects/{orgId}/{projectId}
-        [HttpGet("{orgId}/{projectId}")]
-        public async Task<IActionResult> GetProject([FromRoute] string orgId, [FromRoute] string projectId)
-        {
-            if (string.IsNullOrEmpty(orgId) || string.IsNullOrEmpty(projectId))
-                return BadRequest(new { message = "orgId and projectId required" });
-
-            var project = await _projectService.GetProjectAsync(orgId, projectId);
-            if (project == null) return NotFound();
-            return Ok(project);
-        }
-
-        // New: GET by projectId only (uses scan)
-        // GET /api/projects/by-id/{projectId}
-        [HttpGet("by-id/{projectId}")]
-        public async Task<IActionResult> GetProjectById([FromRoute] string projectId)
+        [HttpGet("{projectId}")]
+        public async Task<IActionResult> GetProject([FromRoute] string projectId)
         {
             if (string.IsNullOrEmpty(projectId))
                 return BadRequest(new { message = "projectId required" });
 
-            var project = await _projectService.GetProjectByIdAsync(projectId);
+            var project = await _projectService.GetProjectAsync(projectId);
             if (project == null) return NotFound();
             return Ok(project);
         }
 
+        // }
         [HttpPost]
         public async Task<IActionResult> CreateProject([FromBody] CreateProjectRequest request)
         {
-            if (!ModelState.IsValid) return BadRequest(ModelState);
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
 
-            // Resolve manager userId if FE provided username
+            // 1. Resolve ManagerUserId
             string managerUserId = request.ManagerUserId;
             if (string.IsNullOrEmpty(managerUserId) && !string.IsNullOrEmpty(request.ManagerUsername))
             {
-                var user = await _userRepository.GetUserByUsernameAsync(request.ManagerUsername);
-                if (user == null) return BadRequest(new { message = "Manager username not found" });
+                var user = await _userService.GetUserByUsernameAsync(request.ManagerUsername);
+                if (user == null)
+                    return BadRequest(new { message = "Manager username not found" });
+
                 managerUserId = user.UserId;
             }
 
             if (string.IsNullOrEmpty(managerUserId))
                 return BadRequest(new { message = "ManagerUserId or ManagerUsername is required" });
 
-            var projectId = string.IsNullOrEmpty(request.ProjectId) ? Guid.NewGuid().ToString() : request.ProjectId;
-            var now = DateTime.UtcNow.ToString("o");
+            // Gán lại vào request để service dùng
+            request.ManagerUserId = managerUserId;
 
-            var project = new ProjectModel
-            {
-                ProjectId = projectId,
-                OrgId = request.OrgId,
-                Name = request.Name,
-                Key = request.Key,
-                Description = request.Description,
-                Visibility = request.Visibility ?? "PRIVATE",
-                Status = request.Status ?? "ACTIVE",
-                Priority = request.Priority,
-                StartDate = request.StartDate,
-                EndDate = request.EndDate,
-                OwnerUserId = $"USER#{managerUserId}",
-                CreatedAt = now,
-                UpdatedAt = now,
-                MemberCount = (request.Members?.Count ?? 0) + 1, // +1 for manager
-                GSI4PK = $"USER#{managerUserId}",
-                GSI4SK = $"PROJECT#{projectId}"
-            };
+            // 2. Gọi service tạo project (service sẽ map DTO -> ProjectModel)
+            var created = await _projectService.CreateProjectAsync(request);
 
-            // persist project
-            var created = await _projectService.CreateProjectAsync(project);
-
-            // add manager as member
+            // 3. Thêm manager vào ProjectMember
             var managerMember = new ProjectMemberModel
             {
                 ProjectId = created.ProjectId,
                 UserId = managerUserId,
-                Role = string.IsNullOrEmpty(request.ManagerRole) ? "PROJECT_OWNER" : request.ManagerRole
+                Role = string.IsNullOrEmpty(request.ManagerRole)
+                        ? "PROJECT_OWNER"
+                        : request.ManagerRole
             };
-            await _projectMemberService.AddMemberAsync(created.ProjectId, managerMember, addedBy: managerUserId);
 
-            // add other members
-            if (request.Members != null && request.Members.Any())
-            {
-                foreach (var m in request.Members)
-                {
-                    if (string.IsNullOrEmpty(m.UserId) || string.IsNullOrEmpty(m.Role)) continue;
-                    var memberModel = new ProjectMemberModel
-                    {
-                        ProjectId = created.ProjectId,
-                        UserId = m.UserId,
-                        Role = m.Role
-                    };
-                    await _projectMemberService.AddMemberAsync(created.ProjectId, memberModel, addedBy: managerUserId);
-                }
-            }
+            await _projectMemberService.AddMemberAsync(
+                created.ProjectId,
+                managerMember,
+                addedBy: managerUserId
+            );
 
-            // return created project
-            return CreatedAtAction(nameof(GetProject), new { orgId = created.OrgId, projectId = created.ProjectId }, created);
+            // 4. Trả về 201
+            return CreatedAtAction(
+                nameof(GetProject),
+                new { projectId = created.ProjectId },
+                created
+            );
         }
 
-        // Existing: update by orgId + projectId
-        [HttpPut("{orgId}/{projectId}")]
-        public async Task<ActionResult<ProjectModel>> UpdateProject(string orgId, string projectId, [FromBody] ProjectModel project)
+        // PUT /api/projects/{projectId}
+        [HttpPut("{projectId}")]
+        public async Task<IActionResult> UpdateProject(
+            [FromRoute] string projectId,
+            [FromBody] ProjectModel project)
         {
-            if (project == null || orgId != project.OrgId || projectId != project.ProjectId)
-                return BadRequest("OrgId or ProjectId mismatch");
-            var updatedProject = await _projectService.UpdateProjectAsync(project);
-            return Ok(updatedProject);
-        }
+            if (string.IsNullOrEmpty(projectId) || project == null)
+                return BadRequest(new { message = "projectId and body are required" });
 
-        // New: update by projectId only (resolve orgId first)
-        // PUT /api/projects/by-id/{projectId}
-        [HttpPut("by-id/{projectId}")]
-        public async Task<IActionResult> UpdateProjectById([FromRoute] string projectId, [FromBody] ProjectModel project)
-        {
-            if (string.IsNullOrEmpty(projectId) || project == null || project.ProjectId != projectId)
-                return BadRequest("projectId mismatch or missing body");
+            // Nếu body có ProjectId thì phải khớp với route
+            if (!string.IsNullOrEmpty(project.ProjectId) && project.ProjectId != projectId)
+                return BadRequest(new { message = "projectId mismatch" });
 
-            var existing = await _projectService.GetProjectByIdAsync(projectId);
-            if (existing == null) return NotFound();
+            // Ép body dùng đúng id từ route
+            project.ProjectId = projectId;
 
-            // ensure OrgId preserved if not provided
-            if (string.IsNullOrEmpty(project.OrgId))
-                project.OrgId = existing.OrgId;
+            // Check tồn tại
+            var existing = await _projectService.GetProjectAsync(projectId);
+            if (existing == null)
+                return NotFound();
 
+            // Update
             var updated = await _projectService.UpdateProjectAsync(project);
             return Ok(updated);
         }
 
-        [HttpDelete("{orgId}/{projectId}")]
-        public async Task<ActionResult> DeleteProject(string orgId, string projectId)
-        {
-            var result = await _projectService.DeleteProjectAsync(orgId, projectId);
-            if (!result) return NotFound();
-            return NoContent();
-        }
-
-        // New: delete by projectId only (resolve orgId first)
-        // DELETE /api/projects/by-id/{projectId}
-        [HttpDelete("by-id/{projectId}")]
-        public async Task<ActionResult> DeleteProjectById([FromRoute] string projectId)
+        // DELETE /api/projects/{projectId}
+        [HttpDelete("{projectId}")]
+        public async Task<ActionResult> DeleteProject([FromRoute] string projectId)
         {
             if (string.IsNullOrEmpty(projectId))
                 return BadRequest(new { message = "projectId required" });
 
-            var existing = await _projectService.GetProjectByIdAsync(projectId);
-            if (existing == null) return NotFound();
+            var success = await _projectService.DeleteProjectAsync(projectId);
+            if (!success)
+                return NotFound();
 
-            var success = await _projectService.DeleteProjectAsync(existing.OrgId, projectId);
-            if (!success) return NotFound();
             return NoContent();
         }
     }

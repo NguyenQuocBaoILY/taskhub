@@ -52,17 +52,17 @@ namespace Web_API.AppHost.Controllers
             if (string.IsNullOrEmpty(projectId))
                 return BadRequest(new { message = "projectId is required" });
 
-            if (request == null || string.IsNullOrEmpty(request.UserId) || string.IsNullOrEmpty(request.Role))
-                return BadRequest(new { message = "userId and role are required" });
+            if (request == null || string.IsNullOrEmpty(request.UserId))
+                return BadRequest(new { message = "userId is required" });
 
-            // addedBy can be taken from JWT claims if available
             string addedBy = User?.Identity?.IsAuthenticated == true ? User.FindFirst("userId")?.Value : null;
 
-            // Map DTO -> Entity
+            var role = string.IsNullOrEmpty(request.Role) ? "MEMBER" : request.Role;
+
             var model = new ProjectMemberModel
             {
                 UserId = request.UserId,
-                Role = request.Role
+                Role = role
             };
 
             var result = await _projectMemberService.AddMemberAsync(projectId, model, addedBy);

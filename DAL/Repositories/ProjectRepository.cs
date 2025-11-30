@@ -18,51 +18,51 @@ namespace DAL.Repositories
             _context = context;
         }
 
-        private static string BuildPk(string orgId) => $"ORG#{orgId}";
+        private static string BuildPk() => $"PROJECT";
         private static string BuildSk(string projectId) => $"PROJECT#{projectId}";
 
         public async Task<ProjectModel> CreateProjectAsync(ProjectModel project)
         {
-            project.PK = BuildPk(project.OrgId);
+            project.PK = BuildPk();
             project.SK = BuildSk(project.ProjectId);
 
             await _context.SaveAsync(project);
             return project;
         }
 
-        public async Task<bool> DeleteProjectAsync(string orgId, string projectId)
+        public async Task<bool> DeleteProjectAsync(string projectId)
         {
-            var pk = BuildPk(orgId);
+            var pk = BuildPk();
             var sk = BuildSk(projectId);
 
             await _context.DeleteAsync<ProjectModel>(pk, sk);
             return true;
         }
 
-        public Task<ProjectModel?> GetProjectAsync(string orgId, string projectId)
+        public Task<ProjectModel> GetProjectAsync(string projectId)
         {
-            var pk = BuildPk(orgId);
+            var pk = BuildPk();
             var sk = BuildSk(projectId);
 
             return _context.LoadAsync<ProjectModel>(pk, sk);
         }
 
-        public async Task<List<ProjectModel>> ListProjectsAsync(string orgId, string? status = null)
+        public async Task<List<ProjectModel>> ListProjectsAsync(string? search = null)
         {
-            var pk = BuildPk(orgId);
+            var pk = BuildPk();
             var query = _context.QueryAsync<ProjectModel>(pk);
             var item = await query.GetRemainingAsync();
 
-            if (!string.IsNullOrEmpty(status))
+            if (!string.IsNullOrEmpty(search))
             {
-                item = item.Where(p => p.Status == status).ToList();
+                item = item.Where(p => p.Name != null && p.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToList();
             }
             return item;
         }
 
         public async Task<ProjectModel> UpdateProjectAsync(ProjectModel project)
         {
-            project.PK = BuildPk(project.OrgId);
+            project.PK = BuildPk();
             project.SK = BuildSk(project.ProjectId);
 
             await _context.SaveAsync(project);
@@ -72,26 +72,13 @@ namespace DAL.Repositories
         // New: scan to find project by projectId only (inefficient for large tables)
         public async Task<ProjectModel?> GetProjectByIdAsync(string projectId)
         {
-            if (string.IsNullOrEmpty(projectId)) return null;
-
+            if (string.IsNullOrEmpty(projectId))
+                return null;
             var sk = BuildSk(projectId);
+            var pk = BuildPk();
 
-            var scanConfig = new ScanOperationConfig
-            {
-                FilterExpression = new Expression
-                {
-                    ExpressionStatement = "SK = :sk",
-                    ExpressionAttributeValues = new Dictionary<string, DynamoDBEntry>
-                    {
-                        { ":sk", sk }
-                    }
-                },
-                Limit = 1
-            };
+            return await _context.LoadAsync<ProjectModel>(pk, sk);
 
-            var search = _context.FromScanAsync<ProjectModel>(scanConfig);
-            var results = await search.GetRemainingAsync();
-            return results.FirstOrDefault();
         }
     }
 }

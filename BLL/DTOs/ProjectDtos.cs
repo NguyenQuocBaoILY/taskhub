@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 using System.ComponentModel.DataAnnotations;
 
 namespace BLL.DTOs
@@ -13,34 +10,25 @@ namespace BLL.DTOs
 
     public class CreateProjectRequest
     {
-        // optional: FE can provide or leave null to generate server-side
+        // optional: FE có thể gửi hoặc để null, server tự generate
         public string ProjectId { get; set; }
 
-        [Required]
-        public string OrgId { get; set; }
-
+        // Tên project (bắt buộc)
         [Required]
         public string Name { get; set; }
 
-        public string Key { get; set; }
         public string Description { get; set; }
 
-        // PRIVATE / PUBLIC / INTERNAL
-        public string Visibility { get; set; } = "PRIVATE";
-
-        // either ManagerUserId (preferred) or ManagerUsername (controller will resolve)
         public string ManagerUserId { get; set; }
         public string ManagerUsername { get; set; }
 
-        // role to assign to manager if provided
+        // Role gán cho manager trong bảng ProjectMember (nếu có)
         public string ManagerRole { get; set; } = "PROJECT_OWNER";
 
-        // list of initial members (use existing AddProjectMemberRequest DTO with UserId + Role)
+        // Danh sách member khởi tạo
         public List<AddProjectMemberRequest> Members { get; set; } = new List<AddProjectMemberRequest>();
 
-        // optional metadata
-        public string Priority { get; set; }
-        public string Status { get; set; } = "ACTIVE";
+        // yyyy-MM-dd hoặc ISO string (tùy convention)
         public string StartDate { get; set; }
         public string EndDate { get; set; }
     }
