@@ -24,13 +24,14 @@ namespace BLL.Services
 
         public async Task<ProjectModel> CreateProjectAsync(CreateProjectRequest request)
         {
-            var projectId = string.IsNullOrEmpty(request.ProjectId) ? Guid.NewGuid().ToString() : request.ProjectId;
+            // Always generate project id server-side
+            var projectId = Guid.NewGuid().ToString();
             
             var project = new ProjectModel
             {
                 ProjectId = projectId,
-                Name = request.Name,
-                Description = request.Description,
+                Name = request.NameProject,
+                Description = request.DescriptionP,
                 StartDate = request.StartDate,
                 EndDate = request.EndDate,
 

@@ -25,7 +25,7 @@ namespace Web_API.AppHost.Controllers
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
         }
 
-        // GET /api/projects?orgId=...&status=...
+        // GET /api/projects?search=...
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ProjectModel>>> GetProjects([FromQuery] string? search)
         {
@@ -44,50 +44,15 @@ namespace Web_API.AppHost.Controllers
             return Ok(project);
         }
 
-        // }
         [HttpPost]
         public async Task<IActionResult> CreateProject([FromBody] CreateProjectRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            // 1. Resolve ManagerUserId
-            string managerUserId = request.ManagerUserId;
-            if (string.IsNullOrEmpty(managerUserId) && !string.IsNullOrEmpty(request.ManagerUsername))
-            {
-                var user = await _userService.GetUserByUsernameAsync(request.ManagerUsername);
-                if (user == null)
-                    return BadRequest(new { message = "Manager username not found" });
-
-                managerUserId = user.UserId;
-            }
-
-            if (string.IsNullOrEmpty(managerUserId))
-                return BadRequest(new { message = "ManagerUserId or ManagerUsername is required" });
-
-            // Gán lại vào request để service dùng
-            request.ManagerUserId = managerUserId;
-
-            // 2. Gọi service tạo project (service sẽ map DTO -> ProjectModel)
+            // Create project — ProjectId is generated server-side in service
             var created = await _projectService.CreateProjectAsync(request);
 
-            // 3. Thêm manager vào ProjectMember
-            var managerMember = new ProjectMemberModel
-            {
-                ProjectId = created.ProjectId,
-                UserId = managerUserId,
-                Role = string.IsNullOrEmpty(request.ManagerRole)
-                        ? "PROJECT_OWNER"
-                        : request.ManagerRole
-            };
-
-            await _projectMemberService.AddMemberAsync(
-                created.ProjectId,
-                managerMember,
-                addedBy: managerUserId
-            );
-
-            // 4. Trả về 201
             return CreatedAtAction(
                 nameof(GetProject),
                 new { projectId = created.ProjectId },

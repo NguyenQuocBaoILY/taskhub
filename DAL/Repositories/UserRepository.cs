@@ -156,27 +156,60 @@ namespace DAL.Repositories
             return true;
         }
 
-        // Search users for FE. If query is null/empty, returns up to 'limit' users (scan).
+        // Search users for FE. If query is null/empty, returns up to 'limit' users (scan restricted to EntityType = USER).
         public async Task<IEnumerable<UserModel>> SearchUsersAsync(string query, int limit)
         {
-            // 1. Scan toàn bộ item map với UserModel (không điều kiện gì)
-            var search = _context.ScanAsync<UserModel>(new List<ScanCondition>());
-            var allUsers = await search.GetRemainingAsync();
-
-            // 2. Nếu không có query => trả limit đầu tiên
+            // If no query provided -> scan only items with EntityType == "USER" to avoid mapping non-user entities
             if (string.IsNullOrWhiteSpace(query))
-                return allUsers.Take(limit);
+            {
+                var scan = _context.ScanAsync<UserModel>(new List<ScanCondition>
+                {
+                    new ScanCondition("EntityType", ScanOperator.Equal, "USER")
+                });
+
+                var users = await scan.GetRemainingAsync();
+
+                // Dedupe by UserId and limit
+                return users
+                    .Where(u => !string.IsNullOrEmpty(u.UserId))
+                    .GroupBy(u => u.UserId)
+                    .Select(g => g.First())
+                    .Take(limit);
+            }
 
             query = query.Trim();
 
-            // 3. Lọc bằng C# theo Name (hoặc DisplayName tùy bạn)
+            var results = new List<UserModel>();
+
+            // 1) Try exact username lookup via GSI6 (fast and authoritative)
+            var exact = await GetUserByUsernameAsync(query);
+            if (exact != null)
+                results.Add(exact);
+
+            // 2) Fallback: scan USER items only and filter by Username or Name containing the query
+            var scanFiltered = _context.ScanAsync<UserModel>(new List<ScanCondition>
+            {
+                new ScanCondition("EntityType", ScanOperator.Equal, "USER")
+            });
+
+            var allUsers = await scanFiltered.GetRemainingAsync();
+
             var filtered = allUsers
-                .Where(u => !string.IsNullOrEmpty(u.Name) &&
-                            u.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
-                .Take(limit)
+                .Where(u =>
+                    (!string.IsNullOrEmpty(u.Username) && u.Username.Contains(query, StringComparison.OrdinalIgnoreCase)) ||
+                    (!string.IsNullOrEmpty(u.Name) && u.Name.Contains(query, StringComparison.OrdinalIgnoreCase)))
                 .ToList();
 
-            return filtered;
+            results.AddRange(filtered);
+
+            // Deduplicate by UserId, preserve first occurrence (exact match first), limit
+            var combined = results
+                .Where(u => !string.IsNullOrEmpty(u.UserId))
+                .GroupBy(u => u.UserId)
+                .Select(g => g.First())
+                .Take(limit);
+
+            return combined;
         }
     }
 }
