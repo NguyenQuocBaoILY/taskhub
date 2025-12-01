@@ -20,17 +20,20 @@ namespace BLL.Services
         private readonly IAuthSessionRepository _authSessionRepository;
         private readonly IConfiguration _configuration;
         private readonly IEmailService _emailService;
+        private readonly IGoogleAuthService _googleAuthService;
 
         public AuthService(
             IUserRepository userRepository,
             IAuthSessionRepository authSessionRepository,
             IConfiguration configuration,
-            IEmailService emailService)
+            IEmailService emailService,
+            IGoogleAuthService googleAuthService)
         {
             _userRepository = userRepository;
             _authSessionRepository = authSessionRepository;
             _configuration = configuration;
             _emailService = emailService;
+            _googleAuthService = googleAuthService;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -107,6 +110,12 @@ namespace BLL.Services
             if (user.Status == "SUSPENDED")
             {
                 return new AuthResponse { Message = "Account is suspended" };
+            }
+
+            // Check if this is a Google account trying to login with password
+            if (user.AuthProvider == "GOOGLE")
+            {
+                return new AuthResponse { Message = "This account was created with Google. Please use Google Sign-In." };
             }
 
             // Verify password
@@ -253,8 +262,8 @@ namespace BLL.Services
                     };
                 }
 
-                // Chỉ gửi email cho user active
-                if (user.Status != "ACTIVE")
+                // Chỉ gửi email cho user active và LOCAL auth
+                if (user.Status != "ACTIVE" || user.AuthProvider != "LOCAL")
                 {
                     return new ForgotPasswordResponse 
                     { 
@@ -328,6 +337,138 @@ namespace BLL.Services
                 Console.WriteLine($"ResetPassword error: {ex.Message}");
                 return new AuthResponse { Message = "Đã xảy ra lỗi. Vui lòng thử lại sau." };
             }
+        }
+
+        public async Task<GoogleLoginResponse> GoogleLoginAsync(GoogleLoginRequest request, string ipAddress, string userAgent)
+        {
+            try
+            {
+                // Verify Google ID token
+                var googleUser = await _googleAuthService.VerifyGoogleTokenAsync(request.IdToken);
+                if (googleUser == null)
+                {
+                    return new GoogleLoginResponse { Message = "Invalid Google token" };
+                }
+
+                // Check if user exists
+                var existingUser = await _userRepository.GetUserByEmailAsync(googleUser.Email);
+                
+                if (existingUser != null)
+                {
+                    // User exists - login
+                    if (existingUser.Status == "SUSPENDED")
+                    {
+                        return new GoogleLoginResponse { Message = "Account is suspended" };
+                    }
+
+                    // Update user info from Google if needed
+                    if (existingUser.AuthProvider == "LOCAL")
+                    {
+                        // Convert local account to Google account
+                        existingUser.AuthProvider = "GOOGLE";
+                        existingUser.EmailVerified = true;
+                        existingUser.Status = "ACTIVE";
+                        existingUser.Avatar = googleUser.Picture;
+                        existingUser.UpdatedAt = DateTime.UtcNow.ToString("o");
+
+                        await _userRepository.UpdateUserAsync(existingUser);
+                    }
+
+                    // Update last login info
+                    await _userRepository.UpdateLastLoginAsync(existingUser.UserId, ipAddress, userAgent);
+
+                    // Generate tokens
+                    var accessToken = GenerateAccessToken(existingUser);
+                    var refreshToken = GenerateOpaqueRefreshToken();
+                    var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
+
+                    // Create session
+                    var session = new AuthSessionModel
+                    {
+                        UserId = existingUser.UserId,
+                        RefreshTokenHash = refreshTokenHash,
+                        IpAddress = ipAddress,
+                        UserAgent = userAgent,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds()
+                    };
+
+                    await _authSessionRepository.CreateSessionAsync(session);
+
+                    return new GoogleLoginResponse
+                    {
+                        AccessToken = accessToken,
+                        RefreshToken = refreshToken,
+                        User = MapToUserProfile(existingUser),
+                        Message = "Login successful",
+                        IsNewUser = false
+                    };
+                }
+                else
+                {
+                    // User doesn't exist - create new account
+                    var newUser = new UserModel
+                    {
+                        Username = GenerateUsernameFromEmail(googleUser.Email),
+                        LowerUsername = GenerateUsernameFromEmail(googleUser.Email).ToLower(),
+                        Email = googleUser.Email,
+                        NormalizedEmail = googleUser.Email.ToLower(),
+                        Name = googleUser.Name,
+                        Avatar = googleUser.Picture,
+                        AuthProvider = "GOOGLE",
+                        Status = "ACTIVE",
+                        EmailVerified = true,
+                        Language = "vi", // Default language
+                        Timezone = "Asia/Ho_Chi_Minh" // Default timezone
+                    };
+
+                    var createdUser = await _userRepository.CreateUserAsync(newUser);
+                    if (createdUser == null)
+                    {
+                        return new GoogleLoginResponse { Message = "Failed to create user account" };
+                    }
+
+                    // Generate tokens for new user
+                    var accessToken = GenerateAccessToken(createdUser);
+                    var refreshToken = GenerateOpaqueRefreshToken();
+                    var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
+
+                    // Create session
+                    var session = new AuthSessionModel
+                    {
+                        UserId = createdUser.UserId,
+                        RefreshTokenHash = refreshTokenHash,
+                        IpAddress = ipAddress,
+                        UserAgent = userAgent,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds()
+                    };
+
+                    await _authSessionRepository.CreateSessionAsync(session);
+
+                    return new GoogleLoginResponse
+                    {
+                        AccessToken = accessToken,
+                        RefreshToken = refreshToken,
+                        User = MapToUserProfile(createdUser),
+                        Message = "Account created and login successful",
+                        IsNewUser = true
+                    };
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GoogleLogin error: {ex.Message}");
+                return new GoogleLoginResponse { Message = "An error occurred during Google login" };
+            }
+        }
+
+        private string GenerateUsernameFromEmail(string email)
+        {
+            // Extract username part from email and make it unique if needed
+            var emailPrefix = email.Split('@')[0];
+            var cleanUsername = emailPrefix.Replace(".", "").Replace("+", "").Replace("-", "");
+            
+            // Ensure it's unique by appending random numbers if needed
+            return $"{cleanUsername}{new Random().Next(1000, 9999)}";
         }
 
         private string GenerateAccessToken(UserModel user)

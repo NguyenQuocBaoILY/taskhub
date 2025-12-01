@@ -48,6 +48,22 @@ namespace Web_API.AppHost.Controllers
                 : Unauthorized(new { message = result.Message });
         }
 
+        [HttpPost("google-login")]
+        public async Task<IActionResult> GoogleLogin([FromBody] GoogleLoginRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var ipAddress = GetIpAddress();
+            var userAgent = Request.Headers["User-Agent"].ToString();
+
+            var result = await _authService.GoogleLoginAsync(request, ipAddress, userAgent);
+            
+            return !string.IsNullOrEmpty(result.AccessToken) 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
         [HttpPost("refresh")]
         public async Task<IActionResult> RefreshToken([FromBody] RefreshTokenRequest request)
         {
@@ -66,13 +82,13 @@ namespace Web_API.AppHost.Controllers
         {
             string userId = null;
             
-            // ? Ch? l?y userId t? JWT claims
+            
             if (User.Identity.IsAuthenticated)
             {
                 userId = User.FindFirst("userId")?.Value;
             }
 
-            // ? N?u không có JWT, v?n có th? logout b?ng refresh token
+
             if (string.IsNullOrEmpty(userId) && string.IsNullOrEmpty(request?.RefreshToken))
             {
                 return BadRequest(new { message = "Unable to identify user" });

@@ -57,8 +57,9 @@ builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<ProjectMemberService>();
 builder.Services.AddScoped<UserService>();
 
-// Thêm dòng này vào Program.cs
+// Add Email and Google Auth services
 builder.Services.AddSingleton<IEmailService, EmailService>();
+builder.Services.AddSingleton<IGoogleAuthService, GoogleAuthService>();
 
 // JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("JWT");
