@@ -96,6 +96,32 @@ namespace Web_API.AppHost.Controllers
             return Ok(new { userId, username, email });
         }
 
+        [HttpPost("forgot-password")]
+        public async Task<IActionResult> ForgotPassword([FromBody] ForgotPasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.ForgotPasswordAsync(request);
+            
+            return result.Success 
+                ? Ok(result) 
+                : BadRequest(result);
+        }
+
+        [HttpPost("reset-password")]
+        public async Task<IActionResult> ResetPassword([FromBody] ResetPasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.ResetPasswordAsync(request);
+            
+            return result.User != null 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
         private string GetIpAddress()
         {
             return Request.Headers.ContainsKey("X-Forwarded-For")

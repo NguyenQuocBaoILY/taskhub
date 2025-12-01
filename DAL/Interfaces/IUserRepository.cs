@@ -18,5 +18,10 @@ namespace DAL.Interfaces
 
         // Search / list users for FE (query optional). Returns up to 'limit' items.
         Task<IEnumerable<UserModel>> SearchUsersAsync(string query = null, int limit = 50);
+
+        Task<bool> UpdatePasswordResetTokenAsync(string userId, string resetToken, string expiry);
+        Task<UserModel> GetUserByPasswordResetTokenAsync(string resetToken);
+        Task<bool> UpdatePasswordAsync(string userId, string newPasswordHash);
+        Task<bool> ClearPasswordResetTokenAsync(string userId);
     }
 }

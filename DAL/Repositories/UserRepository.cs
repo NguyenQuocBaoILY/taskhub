@@ -211,5 +211,69 @@ namespace DAL.Repositories
 
             return combined;
         }
+
+        public async Task<bool> UpdatePasswordResetTokenAsync(string userId, string resetToken, string expiry)
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user == null) return false;
+
+            user.PasswordResetToken = resetToken;
+            user.PasswordResetTokenExpiry = expiry;
+            user.UpdatedAt = DateTime.UtcNow.ToString("o");
+
+            await _context.SaveAsync(user);
+            return true;
+        }
+
+        public async Task<UserModel> GetUserByPasswordResetTokenAsync(string resetToken)
+        {
+            if (string.IsNullOrEmpty(resetToken))
+                return null;
+
+            try
+            {
+                // Scan để tìm user có PasswordResetToken khớp
+                var scanConditions = new List<ScanCondition>
+                {
+                    new ScanCondition("EntityType", ScanOperator.Equal, "USER"),
+                    new ScanCondition("PasswordResetToken", ScanOperator.Equal, resetToken)
+                };
+
+                var search = _context.ScanAsync<UserModel>(scanConditions);
+                var users = await search.GetRemainingAsync();
+                return users.FirstOrDefault();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GetUserByPasswordResetTokenAsync error: {ex.Message}");
+                return null;
+            }
+        }
+
+        public async Task<bool> UpdatePasswordAsync(string userId, string newPasswordHash)
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user == null) return false;
+
+            user.PasswordHash = newPasswordHash;
+            user.LastPasswordChangedAt = DateTime.UtcNow.ToString("o");
+            user.UpdatedAt = DateTime.UtcNow.ToString("o");
+
+            await _context.SaveAsync(user);
+            return true;
+        }
+
+        public async Task<bool> ClearPasswordResetTokenAsync(string userId)
+        {
+            var user = await GetUserByIdAsync(userId);
+            if (user == null) return false;
+
+            user.PasswordResetToken = null;
+            user.PasswordResetTokenExpiry = null;
+            user.UpdatedAt = DateTime.UtcNow.ToString("o");
+
+            await _context.SaveAsync(user);
+            return true;
+        }
     }
 }

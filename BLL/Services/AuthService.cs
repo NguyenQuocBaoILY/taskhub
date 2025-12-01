@@ -19,15 +19,18 @@ namespace BLL.Services
         private readonly IUserRepository _userRepository;
         private readonly IAuthSessionRepository _authSessionRepository;
         private readonly IConfiguration _configuration;
+        private readonly IEmailService _emailService;
 
         public AuthService(
             IUserRepository userRepository,
             IAuthSessionRepository authSessionRepository,
-            IConfiguration configuration)
+            IConfiguration configuration,
+            IEmailService emailService)
         {
             _userRepository = userRepository;
             _authSessionRepository = authSessionRepository;
             _configuration = configuration;
+            _emailService = emailService;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -234,6 +237,99 @@ namespace BLL.Services
             }
         }
 
+        public async Task<ForgotPasswordResponse> ForgotPasswordAsync(ForgotPasswordRequest request)
+        {
+            try
+            {
+                var user = await _userRepository.GetUserByEmailAsync(request.Email);
+                
+                // Luôn trả về success để không leak thông tin user có tồn tại hay không
+                if (user == null)
+                {
+                    return new ForgotPasswordResponse 
+                    { 
+                        Success = true, 
+                        Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu." 
+                    };
+                }
+
+                // Chỉ gửi email cho user active
+                if (user.Status != "ACTIVE")
+                {
+                    return new ForgotPasswordResponse 
+                    { 
+                        Success = true, 
+                        Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu." 
+                    };
+                }
+
+                // Tạo reset token
+                var resetToken = GenerateResetPasswordToken();
+                var tokenExpiry = DateTime.UtcNow.AddHours(1); // 1 giờ
+
+                // Lưu token vào database (cần thêm fields vào UserModel)
+                await _userRepository.UpdatePasswordResetTokenAsync(user.UserId, resetToken, tokenExpiry.ToString("o"));
+
+                // Gửi email
+                var emailSent = await _emailService.SendResetPasswordEmailAsync(user.Email, resetToken, user.Name);
+
+                return new ForgotPasswordResponse
+                {
+                    Success = true,
+                    Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu."
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ForgotPassword error: {ex.Message}");
+                return new ForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Đã xảy ra lỗi. Vui lòng thử lại sau."
+                };
+            }
+        }
+
+        public async Task<AuthResponse> ResetPasswordAsync(ResetPasswordRequest request)
+        {
+            try
+            {
+                var user = await _userRepository.GetUserByPasswordResetTokenAsync(request.Token);
+                
+                if (user == null)
+                {
+                    return new AuthResponse { Message = "Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn." };
+                }
+
+                // Kiểm tra token có hết hạn không
+                if (DateTime.TryParse(user.PasswordResetTokenExpiry, out DateTime expiry) && DateTime.UtcNow > expiry)
+                {
+                    return new AuthResponse { Message = "Token đặt lại mật khẩu đã hết hạn." };
+                }
+
+                // Cập nhật mật khẩu mới
+                var newPasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
+                await _userRepository.UpdatePasswordAsync(user.UserId, newPasswordHash);
+
+                // Xóa token reset
+                await _userRepository.ClearPasswordResetTokenAsync(user.UserId);
+
+                // Xóa tất cả sessions của user (logout khỏi tất cả thiết bị)
+                await _authSessionRepository.DeleteAllUserSessionsAsync(user.UserId);
+
+                return new AuthResponse
+                {
+                    Message = "Mật khẩu đã được đặt lại thành công. Vui lòng đăng nhập lại.",
+                    User = MapToUserProfile(user)
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"ResetPassword error: {ex.Message}");
+                return new AuthResponse { Message = "Đã xảy ra lỗi. Vui lòng thử lại sau." };
+            }
+        }
+
         private string GenerateAccessToken(UserModel user)
         {
             var tokenHandler = new JwtSecurityTokenHandler();
@@ -269,6 +365,14 @@ namespace BLL.Services
         private string GenerateOpaqueRefreshToken()
         {
             // Cryptographically secure random string
+            var randomBytes = new byte[32];
+            using var rng = RandomNumberGenerator.Create();
+            rng.GetBytes(randomBytes);
+            return Convert.ToBase64String(randomBytes).Replace("+", "-").Replace("/", "_").Replace("=", "");
+        }
+
+        private string GenerateResetPasswordToken()
+        {
             var randomBytes = new byte[32];
             using var rng = RandomNumberGenerator.Create();
             rng.GetBytes(randomBytes);

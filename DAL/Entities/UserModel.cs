@@ -88,6 +88,12 @@ namespace DAL.Entities
         [DynamoDBProperty]
         public string LastActiveAt { get; set; }
 
+        [DynamoDBProperty]
+        public string PasswordResetToken { get; set; }
+
+        [DynamoDBProperty]
+        public string PasswordResetTokenExpiry { get; set; }
+
         // GSI1 - Email Lookup
         [DynamoDBGlobalSecondaryIndexHashKey("GSI1-EmailLookup")]
         public string GSI1PK { get; set; }

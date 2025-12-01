@@ -57,6 +57,9 @@ builder.Services.AddSingleton<AuthService>();
 builder.Services.AddSingleton<ProjectMemberService>();
 builder.Services.AddScoped<UserService>();
 
+// Thêm dòng này vào Program.cs
+builder.Services.AddSingleton<IEmailService, EmailService>();
+
 // JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("JWT");
 var jwtSecretKey = jwtSettings["SecretKey"] ?? "your-super-secret-jwt-key-here-make-it-long-enough-minimum-32-characters";
