@@ -9,6 +9,8 @@ Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "API", "Web API\Web API.AppH
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "BLL", "BLL\BLL.csproj", "{A9F43D2B-0DD2-4B77-82AA-8FAD548930AA}"
 EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "Infrastructure", "Infrastructure\Infrastructure.csproj", "{5D5E4FD8-284A-42E1-AF04-F06AC7529D00}"
+EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|Any CPU = Debug|Any CPU
@@ -27,6 +29,10 @@ Global
 		{A9F43D2B-0DD2-4B77-82AA-8FAD548930AA}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{A9F43D2B-0DD2-4B77-82AA-8FAD548930AA}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{A9F43D2B-0DD2-4B77-82AA-8FAD548930AA}.Release|Any CPU.Build.0 = Release|Any CPU
+		{5D5E4FD8-284A-42E1-AF04-F06AC7529D00}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{5D5E4FD8-284A-42E1-AF04-F06AC7529D00}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{5D5E4FD8-284A-42E1-AF04-F06AC7529D00}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{5D5E4FD8-284A-42E1-AF04-F06AC7529D00}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
