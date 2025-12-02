@@ -1,0 +1,27 @@
+using DAL.Entities;
+using System.Collections.Generic;
+using System.Threading.Tasks;
+
+namespace DAL.Interfaces
+{
+    public interface IUserRepository
+    {
+        Task<UserModel> GetUserByIdAsync(string userId);
+        Task<UserModel> GetUserByUsernameAsync(string username);
+        Task<UserModel> GetUserByEmailAsync(string email);
+        Task<UserModel> CreateUserAsync(UserModel user);
+        Task<UserModel> UpdateUserAsync(UserModel user);
+        Task<bool> IsUsernameExistsAsync(string username);
+        Task<bool> IsEmailExistsAsync(string email);
+        Task<bool> UpdateFailedLoginAttemptsAsync(string userId, int attempts, string lockedUntil = null);
+        Task<bool> UpdateLastLoginAsync(string userId, string ipAddress, string userAgent);
+
+        // Search / list users for FE (query optional). Returns up to 'limit' items.
+        Task<IEnumerable<UserModel>> SearchUsersAsync(string query = null, int limit = 50);
+
+        Task<bool> UpdatePasswordResetTokenAsync(string userId, string resetToken, string expiry);
+        Task<UserModel> GetUserByPasswordResetTokenAsync(string resetToken);
+        Task<bool> UpdatePasswordAsync(string userId, string newPasswordHash);
+        Task<bool> ClearPasswordResetTokenAsync(string userId);
+    }
+}

@@ -1,0 +1,35 @@
+﻿private string GenerateResetPasswordEmailTemplate(string userName, string resetLink)
+{
+    return $@"
+        <html>
+        <head>
+            <meta charset='UTF-8'>
+            <meta name='viewport' content='width=device-width, initial-scale=1.0'>
+            <style>
+                .container {{ max-width: 600px; margin: 0 auto; font-family: Arial, sans-serif; }}
+                .header {{ background-color: #2563eb; color: white; padding: 20px; text-align: center; }}
+                .content {{ padding: 20px; background-color: #f9fafb; }}
+                .button {{ background-color: #2563eb; color: white; padding: 12px 24px; text-decoration: none; border-radius: 6px; display: inline-block; margin: 20px 0; }}
+                .footer {{ padding: 20px; text-align: center; color: #6b7280; font-size: 14px; }}
+            </style>
+        </head>
+        <body>
+            <div class='container'>
+                <div class='header'>
+                    <h1>TaskHub</h1>
+                </div>
+                <div class='content'>
+                    <h2>Xin chào {userName},</h2>
+                    <p>Bạn đã yêu cầu đặt lại mật khẩu cho tài khoản TaskHub của mình.</p>
+                    <p>Nhấp vào nút bên dưới để đặt lại mật khẩu:</p>
+                    <a href='{resetLink}' class='button'>Đặt lại mật khẩu</a>
+                    <p>Liên kết này sẽ hết hạn sau 1 giờ.</p>
+                    <p>Nếu bạn không yêu cầu đặt lại mật khẩu, vui lòng bỏ qua email này.</p>
+                </div>
+                <div class='footer'>
+                    <p>© 2024 TaskHub. Tất cả quyền được bảo lưu.</p>
+                </div>
+            </div>
+        </body>
+        </html>";
+}
