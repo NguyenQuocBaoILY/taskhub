@@ -13,16 +13,16 @@ namespace WebAPI.APPHost.Controllers
     [Route("api/task")]
     public class TaskController : ControllerBase
     {
-        private readonly ITaskRepository _taskRepo;
         private readonly ProjectMemberService _memberService;
         private readonly TaskFileService _taskFileService;
+        private readonly TaskService _taskService;
 
         public TaskController(
-            ITaskRepository taskRepo,
+            TaskService taskService,
             ProjectMemberService memberService,
             TaskFileService taskFileService)
         {
-            _taskRepo = taskRepo;
+            _taskService = taskService;
             _memberService = memberService;
             _taskFileService = taskFileService;
         }
@@ -40,7 +40,7 @@ namespace WebAPI.APPHost.Controllers
             var member = await _memberService.GetProjectMemberAsync(projectId, userId);
             if (member == null) return Forbid();
 
-            var tasks = await _taskRepo.ListTasksAsync(projectId, status, assignee);
+            var tasks = await _taskService.ListTasksAsync(projectId, status, assignee);
             return Ok(tasks);
         }
 
@@ -56,7 +56,7 @@ namespace WebAPI.APPHost.Controllers
             var member = await _memberService.GetProjectMemberAsync(projectId, userId);
             if (member == null) return Forbid();
 
-            var task = await _taskRepo.GetTaskAsync(projectId, taskId);
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
             if (task == null) return NotFound();
             return Ok(task);
         }
@@ -76,7 +76,7 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(task.Assignee))
                 task.Assignee = userId;
 
-            var created = await _taskRepo.CreateTaskAsync(task);
+            var created = await _taskService.CreateTaskAsync(task);
             return Ok(created);
         }
 
@@ -90,7 +90,7 @@ namespace WebAPI.APPHost.Controllers
                 return BadRequest("projectId & taskId required");
             if (task == null) return BadRequest("Body required");
 
-            var existing = await _taskRepo.GetTaskAsync(projectId, taskId);
+            var existing = await _taskService.GetTaskAsync(projectId, taskId);
             if (existing == null) return NotFound();
 
             existing.Title = task.Title ?? existing.Title;
@@ -101,7 +101,7 @@ namespace WebAPI.APPHost.Controllers
             existing.AssignedAt = string.IsNullOrEmpty(existing.AssignedAt) ? DateTime.UtcNow.ToString("o") : existing.AssignedAt;
             existing.Status = string.IsNullOrEmpty(task.Status) ? existing.Status : task.Status;
 
-            var updated = await _taskRepo.UpdateTaskAsync(existing);
+            var updated = await _taskService.UpdateTaskAsync(existing);
             return Ok(updated);
         }
 
@@ -118,7 +118,7 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(newStatus))
                 return BadRequest("status required");
 
-            var ok = await _taskRepo.UpdateStatusAsync(projectId, taskId, newStatus);
+            var ok = await _taskService.UpdateStatusAsync(projectId, taskId, newStatus);
             if (!ok) return NotFound();
             return NoContent();
         }
@@ -131,7 +131,7 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId))
                 return BadRequest("projectId & taskId required");
 
-            var ok = await _taskRepo.DeleteTaskAsync(projectId, taskId);
+            var ok = await _taskService.DeleteTaskAsync(projectId, taskId);
             if (!ok) return NotFound();
             return NoContent();
         }
