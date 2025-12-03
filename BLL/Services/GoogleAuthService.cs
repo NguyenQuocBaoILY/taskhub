@@ -5,11 +5,6 @@ using System.Threading.Tasks;
 
 namespace BLL.Services
 {
-    public interface IGoogleAuthService
-    {
-        Task<GoogleUserInfo> VerifyGoogleTokenAsync(string idToken);
-    }
-
     public class GoogleAuthService : IGoogleAuthService
     {
         private readonly IConfiguration _configuration;
@@ -19,7 +14,7 @@ namespace BLL.Services
             _configuration = configuration;
         }
 
-        public async Task<GoogleUserInfo> VerifyGoogleTokenAsync(string idToken)
+        public async Task<GoogleUser> VerifyGoogleTokenAsync(string idToken)
         {
             try
             {
@@ -30,13 +25,13 @@ namespace BLL.Services
                     Audience = new[] { clientId }
                 });
 
-                return new GoogleUserInfo
+                return new GoogleUser
                 {
                     Email = payload.Email,
                     Name = payload.Name,
                     Picture = payload.Picture,
-                    EmailVerified = payload.EmailVerified,
-                    GoogleId = payload.Subject
+                    GivenName = payload.GivenName,
+                    FamilyName = payload.FamilyName
                 };
             }
             catch (InvalidJwtException)
@@ -53,5 +48,7 @@ namespace BLL.Services
         public string Picture { get; set; }
         public bool EmailVerified { get; set; }
         public string GoogleId { get; set; }
+        public string GivenName { get; set; }
+        public string FamilyName { get; set; }
     }
 }

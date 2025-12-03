@@ -45,5 +45,15 @@ namespace DAL.Entities
 
         [DynamoDBGlobalSecondaryIndexRangeKey("GSI1-UserSessions")]
         public string GSI1SK { get; set; }
+
+        // Thêm properties cho Cognito
+        [DynamoDBProperty]
+        public string CognitoAccessToken { get; set; }
+
+        [DynamoDBProperty]
+        public string CognitoRefreshToken { get; set; }
+
+        [DynamoDBProperty]
+        public string AuthProvider { get; set; } // "LOCAL", "GOOGLE", "COGNITO"
     }
 }

@@ -11,6 +11,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Threading.Tasks;
 using BCrypt.Net;
+using System.Linq;
 
 namespace BLL.Services
 {
@@ -21,19 +22,22 @@ namespace BLL.Services
         private readonly IConfiguration _configuration;
         private readonly IEmailService _emailService;
         private readonly IGoogleAuthService _googleAuthService;
+        private readonly ICognitoAuthService _cognitoAuthService;
 
         public AuthService(
             IUserRepository userRepository,
             IAuthSessionRepository authSessionRepository,
             IConfiguration configuration,
             IEmailService emailService,
-            IGoogleAuthService googleAuthService)
+            IGoogleAuthService googleAuthService,
+            ICognitoAuthService cognitoAuthService)
         {
             _userRepository = userRepository;
             _authSessionRepository = authSessionRepository;
             _configuration = configuration;
             _emailService = emailService;
             _googleAuthService = googleAuthService;
+            _cognitoAuthService = cognitoAuthService;
         }
 
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
@@ -62,7 +66,7 @@ namespace BLL.Services
                 Language = request.Language,
                 PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.Password),
                 AuthProvider = "LOCAL",
-                Status = "ACTIVE" // ✅ Thay đổi thành ACTIVE để test dễ hơn
+                Status = "ACTIVE"
             };
 
             var createdUser = await _userRepository.CreateUserAsync(user);
@@ -76,6 +80,11 @@ namespace BLL.Services
                 Message = "User registered successfully. Please verify your email.",
                 User = MapToUserProfile(createdUser)
             };
+        }
+
+        public async Task<AuthResponse> RegisterWithCognitoAsync(RegisterRequest request)
+        {
+            return await _cognitoAuthService.RegisterWithCognitoAsync(request);
         }
 
         public async Task<AuthResponse> LoginAsync(LoginRequest request, string ipAddress, string userAgent)
@@ -118,6 +127,12 @@ namespace BLL.Services
                 return new AuthResponse { Message = "This account was created with Google. Please use Google Sign-In." };
             }
 
+            // Check if this is a Cognito account trying to login with password
+            if (user.AuthProvider == "COGNITO")
+            {
+                return new AuthResponse { Message = "This account was created with Cognito. Please use Cognito Sign-In." };
+            }
+
             // Verify password
             if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
             {
@@ -139,17 +154,17 @@ namespace BLL.Services
 
             // Generate tokens
             var accessToken = GenerateAccessToken(user);
-            var refreshToken = GenerateOpaqueRefreshToken(); // Random string
+            var refreshToken = GenerateOpaqueRefreshToken();
             var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
 
             // Create session
             var session = new AuthSessionModel
             {
                 UserId = user.UserId,
-                RefreshTokenHash = refreshTokenHash, // Store hashed version
+                RefreshTokenHash = refreshTokenHash,
                 IpAddress = ipAddress,
                 UserAgent = userAgent,
-                ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds() // 30 days
+                ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds()
             };
 
             await _authSessionRepository.CreateSessionAsync(session);
@@ -157,7 +172,7 @@ namespace BLL.Services
             return new AuthResponse
             {
                 AccessToken = accessToken,
-                RefreshToken = refreshToken, // Return plain text to client
+                RefreshToken = refreshToken,
                 User = MapToUserProfile(user),
                 Message = "Login successful"
             };
@@ -167,7 +182,6 @@ namespace BLL.Services
         {
             try
             {
-                // ✅ Sử dụng method mới
                 var validSession = await _authSessionRepository.GetSessionByRefreshTokenAsync(request.RefreshToken);
 
                 if (validSession == null || validSession.ExpiresAt < DateTimeOffset.UtcNow.ToUnixTimeSeconds())
@@ -181,20 +195,42 @@ namespace BLL.Services
                     return new AuthResponse { Message = "User not found or inactive" };
                 }
 
-                // Generate new access token
-                var accessToken = GenerateAccessToken(user);
-
-                return new AuthResponse
+                // Handle Cognito refresh token separately
+                if (validSession.AuthProvider == "COGNITO" && !string.IsNullOrEmpty(validSession.CognitoRefreshToken))
                 {
-                    AccessToken = accessToken,
-                    RefreshToken = request.RefreshToken,
-                    User = MapToUserProfile(user),
-                    Message = "Token refreshed successfully"
-                };
+                    var cognitoRefreshResult = await _cognitoAuthService.RefreshCognitoTokenAsync(validSession.CognitoRefreshToken);
+                    
+                    if (string.IsNullOrEmpty(cognitoRefreshResult.AccessToken))
+                    {
+                        return cognitoRefreshResult;
+                    }
+
+                    validSession.CognitoAccessToken = cognitoRefreshResult.AccessToken;
+                    
+                    return new AuthResponse
+                    {
+                        AccessToken = cognitoRefreshResult.AccessToken,
+                        RefreshToken = request.RefreshToken,
+                        User = MapToUserProfile(user),
+                        Message = "Cognito token refreshed successfully"
+                    };
+                }
+                else
+                {
+                    // Generate new local access token for LOCAL/GOOGLE users
+                    var accessToken = GenerateAccessToken(user);
+
+                    return new AuthResponse
+                    {
+                        AccessToken = accessToken,
+                        RefreshToken = request.RefreshToken,
+                        User = MapToUserProfile(user),
+                        Message = "Token refreshed successfully"
+                    };
+                }
             }
             catch (Exception ex)
             {
-                // Log exception for debugging
                 Console.WriteLine($"RefreshToken error: {ex.Message}");
                 return new AuthResponse { Message = "Invalid or expired refresh token" };
             }
@@ -204,7 +240,6 @@ namespace BLL.Services
         {
             try
             {
-                // ✅ Nếu không có userId từ JWT, tìm từ refresh token
                 if (string.IsNullOrEmpty(userId) && !string.IsNullOrEmpty(request?.RefreshToken))
                 {
                     var session = await _authSessionRepository.GetSessionByRefreshTokenAsync(request.RefreshToken);
@@ -214,7 +249,6 @@ namespace BLL.Services
                     }
                 }
 
-                // ✅ Kiểm tra có userId không
                 if (string.IsNullOrEmpty(userId))
                 {
                     return false;
@@ -222,11 +256,24 @@ namespace BLL.Services
 
                 if (request.LogoutAllDevices)
                 {
+                    var allSessions = await _authSessionRepository.GetUserSessionsAsync(userId);
+                    
+                    foreach (var session in allSessions.Where(s => s.AuthProvider == "COGNITO" && !string.IsNullOrEmpty(s.CognitoAccessToken)))
+                    {
+                        try
+                        {
+                            // Optionally invalidate Cognito token
+                        }
+                        catch
+                        {
+                            // Log error but continue
+                        }
+                    }
+                    
                     return await _authSessionRepository.DeleteAllUserSessionsAsync(userId);
                 }
                 else if (!string.IsNullOrEmpty(request.RefreshToken))
                 {
-                    // ✅ Tìm session bằng refresh token
                     var session = await _authSessionRepository.GetSessionByRefreshTokenAsync(request.RefreshToken);
                     
                     if (session != null && session.UserId == userId)
@@ -235,12 +282,10 @@ namespace BLL.Services
                     }
                 }
 
-                // ✅ Fallback: xóa tất cả session của user
                 return await _authSessionRepository.DeleteAllUserSessionsAsync(userId);
             }
             catch (Exception ex)
             {
-                // Log exception for debugging
                 Console.WriteLine($"Logout error: {ex.Message}");
                 return false;
             }
@@ -252,7 +297,6 @@ namespace BLL.Services
             {
                 var user = await _userRepository.GetUserByEmailAsync(request.Email);
                 
-                // Luôn trả về success để không leak thông tin user có tồn tại hay không
                 if (user == null)
                 {
                     return new ForgotPasswordResponse 
@@ -262,7 +306,6 @@ namespace BLL.Services
                     };
                 }
 
-                // Chỉ gửi email cho user active và LOCAL auth
                 if (user.Status != "ACTIVE" || user.AuthProvider != "LOCAL")
                 {
                     return new ForgotPasswordResponse 
@@ -272,14 +315,11 @@ namespace BLL.Services
                     };
                 }
 
-                // Tạo reset token
                 var resetToken = GenerateResetPasswordToken();
-                var tokenExpiry = DateTime.UtcNow.AddHours(1); // 1 giờ
+                var tokenExpiry = DateTime.UtcNow.AddHours(1);
 
-                // Lưu token vào database (cần thêm fields vào UserModel)
                 await _userRepository.UpdatePasswordResetTokenAsync(user.UserId, resetToken, tokenExpiry.ToString("o"));
 
-                // Gửi email
                 var emailSent = await _emailService.SendResetPasswordEmailAsync(user.Email, resetToken, user.Name);
 
                 return new ForgotPasswordResponse
@@ -310,20 +350,16 @@ namespace BLL.Services
                     return new AuthResponse { Message = "Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn." };
                 }
 
-                // Kiểm tra token có hết hạn không
                 if (DateTime.TryParse(user.PasswordResetTokenExpiry, out DateTime expiry) && DateTime.UtcNow > expiry)
                 {
                     return new AuthResponse { Message = "Token đặt lại mật khẩu đã hết hạn." };
                 }
 
-                // Cập nhật mật khẩu mới
                 var newPasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
                 await _userRepository.UpdatePasswordAsync(user.UserId, newPasswordHash);
 
-                // Xóa token reset
                 await _userRepository.ClearPasswordResetTokenAsync(user.UserId);
 
-                // Xóa tất cả sessions của user (logout khỏi tất cả thiết bị)
                 await _authSessionRepository.DeleteAllUserSessionsAsync(user.UserId);
 
                 return new AuthResponse
@@ -343,28 +379,23 @@ namespace BLL.Services
         {
             try
             {
-                // Verify Google ID token
                 var googleUser = await _googleAuthService.VerifyGoogleTokenAsync(request.IdToken);
                 if (googleUser == null)
                 {
                     return new GoogleLoginResponse { Message = "Invalid Google token" };
                 }
 
-                // Check if user exists
                 var existingUser = await _userRepository.GetUserByEmailAsync(googleUser.Email);
                 
                 if (existingUser != null)
                 {
-                    // User exists - login
                     if (existingUser.Status == "SUSPENDED")
                     {
                         return new GoogleLoginResponse { Message = "Account is suspended" };
                     }
 
-                    // Update user info from Google if needed
                     if (existingUser.AuthProvider == "LOCAL")
                     {
-                        // Convert local account to Google account
                         existingUser.AuthProvider = "GOOGLE";
                         existingUser.EmailVerified = true;
                         existingUser.Status = "ACTIVE";
@@ -374,15 +405,12 @@ namespace BLL.Services
                         await _userRepository.UpdateUserAsync(existingUser);
                     }
 
-                    // Update last login info
                     await _userRepository.UpdateLastLoginAsync(existingUser.UserId, ipAddress, userAgent);
 
-                    // Generate tokens
                     var accessToken = GenerateAccessToken(existingUser);
                     var refreshToken = GenerateOpaqueRefreshToken();
                     var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
 
-                    // Create session
                     var session = new AuthSessionModel
                     {
                         UserId = existingUser.UserId,
@@ -405,7 +433,6 @@ namespace BLL.Services
                 }
                 else
                 {
-                    // User doesn't exist - create new account
                     var newUser = new UserModel
                     {
                         Username = GenerateUsernameFromEmail(googleUser.Email),
@@ -417,8 +444,8 @@ namespace BLL.Services
                         AuthProvider = "GOOGLE",
                         Status = "ACTIVE",
                         EmailVerified = true,
-                        Language = "vi", // Default language
-                        Timezone = "Asia/Ho_Chi_Minh" // Default timezone
+                        Language = "vi",
+                        Timezone = "Asia/Ho_Chi_Minh"
                     };
 
                     var createdUser = await _userRepository.CreateUserAsync(newUser);
@@ -427,12 +454,10 @@ namespace BLL.Services
                         return new GoogleLoginResponse { Message = "Failed to create user account" };
                     }
 
-                    // Generate tokens for new user
                     var accessToken = GenerateAccessToken(createdUser);
                     var refreshToken = GenerateOpaqueRefreshToken();
                     var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
 
-                    // Create session
                     var session = new AuthSessionModel
                     {
                         UserId = createdUser.UserId,
@@ -461,13 +486,108 @@ namespace BLL.Services
             }
         }
 
+        public async Task<AuthResponse> CognitoLoginAsync(LoginRequest request, string ipAddress, string userAgent)
+        {
+            try
+            {
+                var cognitoResult = await _cognitoAuthService.LoginWithCognitoAsync(request);
+                
+                if (string.IsNullOrEmpty(cognitoResult.AccessToken))
+                    return cognitoResult;
+                
+                var cognitoUser = await _cognitoAuthService.GetUserFromTokenAsync(cognitoResult.AccessToken);
+                
+                var localUser = await GetOrCreateLocalUserFromCognito(cognitoUser);
+                
+                var refreshToken = GenerateOpaqueRefreshToken();
+                var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
+                
+                var session = new AuthSessionModel
+                {
+                    UserId = localUser.UserId,
+                    RefreshTokenHash = refreshTokenHash,
+                    IpAddress = ipAddress,
+                    UserAgent = userAgent,
+                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(),
+                    CognitoAccessToken = cognitoResult.AccessToken,
+                    CognitoRefreshToken = cognitoResult.RefreshToken,
+                    AuthProvider = "COGNITO"
+                };
+                
+                await _authSessionRepository.CreateSessionAsync(session);
+                
+                return new AuthResponse
+                {
+                    AccessToken = cognitoResult.AccessToken,
+                    RefreshToken = refreshToken,
+                    User = MapToUserProfile(localUser),
+                    Message = "Cognito login successful"
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"CognitoLogin error: {ex.Message}");
+                return new AuthResponse { Message = "Cognito authentication failed" };
+            }
+        }
+
+        public async Task<CognitoConfirmSignUpResponse> ConfirmCognitoSignUpAsync(CognitoConfirmSignUpRequest request)
+        {
+            return await _cognitoAuthService.ConfirmSignUpAsync(request);
+        }
+
+        public async Task<CognitoConfirmSignUpResponse> ResendCognitoConfirmationCodeAsync(CognitoResendConfirmationRequest request)
+        {
+            return await _cognitoAuthService.ResendConfirmationCodeAsync(request);
+        }
+
+        private async Task<UserModel> GetOrCreateLocalUserFromCognito(CognitoUser cognitoUser)
+        {
+            if (cognitoUser == null || string.IsNullOrEmpty(cognitoUser.Email) || string.IsNullOrEmpty(cognitoUser.Username))
+            {
+                throw new ArgumentException("Invalid Cognito user data");
+            }
+
+            var existingUser = await _userRepository.GetUserByEmailAsync(cognitoUser.Email);
+            
+            if (existingUser != null)
+            {
+                existingUser.AuthProvider = "COGNITO";
+                existingUser.EmailVerified = cognitoUser.EmailVerified;
+                existingUser.Status = "ACTIVE";
+                existingUser.UpdatedAt = DateTime.UtcNow.ToString("o");
+                
+                await _userRepository.UpdateUserAsync(existingUser);
+                return existingUser;
+            }
+            
+            var newUser = new UserModel
+            {
+                Username = cognitoUser.Username,
+                LowerUsername = cognitoUser.Username.ToLower(),
+                Email = cognitoUser.Email,
+                NormalizedEmail = cognitoUser.Email.ToLower(),
+                Name = cognitoUser.Name ?? cognitoUser.Username,
+                PhoneNumber = cognitoUser.PhoneNumber,
+                AuthProvider = "COGNITO",
+                Status = "ACTIVE",
+                EmailVerified = cognitoUser.EmailVerified,
+                Language = "en",
+                Timezone = "UTC",
+                CreatedAt = DateTime.UtcNow.ToString("o"),
+                UpdatedAt = DateTime.UtcNow.ToString("o")
+            };
+
+            return await _userRepository.CreateUserAsync(newUser);
+        }
+
         private string GenerateUsernameFromEmail(string email)
         {
-            // Extract username part from email and make it unique if needed
+            if (string.IsNullOrEmpty(email)) return "user" + Guid.NewGuid().ToString("N")[..8];
+            
             var emailPrefix = email.Split('@')[0];
             var cleanUsername = emailPrefix.Replace(".", "").Replace("+", "").Replace("-", "");
             
-            // Ensure it's unique by appending random numbers if needed
             return $"{cleanUsername}{new Random().Next(1000, 9999)}";
         }
 
@@ -485,7 +605,7 @@ namespace BLL.Services
                     new Claim("email", user.Email),
                     new Claim("authProvider", user.AuthProvider)
                 }),
-                Expires = DateTime.UtcNow.AddMinutes(15), // Short-lived access token
+                Expires = DateTime.UtcNow.AddMinutes(15),
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature),
                 Issuer = _configuration["JWT:Issuer"] ?? "TaskHub",
                 Audience = _configuration["JWT:Audience"] ?? "TaskHub"
@@ -495,17 +615,8 @@ namespace BLL.Services
             return tokenHandler.WriteToken(token);
         }
 
-        private string GenerateRefreshToken()
-        {
-            var randomBytes = new byte[64];
-            using var rng = RandomNumberGenerator.Create();
-            rng.GetBytes(randomBytes);
-            return Convert.ToBase64String(randomBytes);
-        }
-
         private string GenerateOpaqueRefreshToken()
         {
-            // Cryptographically secure random string
             var randomBytes = new byte[32];
             using var rng = RandomNumberGenerator.Create();
             rng.GetBytes(randomBytes);

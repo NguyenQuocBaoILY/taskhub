@@ -2,6 +2,7 @@
 using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
+using Amazon.CognitoIdentityProvider;
 using BLL.Services;
 using DAL.Interfaces;
 using DAL.Repositories;
@@ -16,45 +17,54 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// AWS DynamoDB Local
+// ✅ AWS CONFIG - Separate credentials for different services
 var awsConfig = builder.Configuration.GetSection("AWS");
-var accessKey = awsConfig["AccessKey"];
-var secretKey = awsConfig["SecretKey"];
-var serviceUrl = awsConfig["ServiceURL"];
 
-var credentials = new BasicAWSCredentials(accessKey, secretKey);
-var clientConfig = new AmazonDynamoDBConfig { ServiceURL = serviceUrl };
+// 1. DynamoDB Local (dummy credentials cho localhost)
+var dynamoCredentials = new BasicAWSCredentials("dummy", "dummy");
+var dynamoConfig = new AmazonDynamoDBConfig { ServiceURL = awsConfig["ServiceURL"] };
 
-builder.Services.AddSingleton<IAmazonDynamoDB>(_ => new AmazonDynamoDBClient(credentials, clientConfig));
+builder.Services.AddSingleton<IAmazonDynamoDB>(_ => 
+    new AmazonDynamoDBClient(dynamoCredentials, dynamoConfig));
 builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 {
     var client = sp.GetRequiredService<IAmazonDynamoDB>();
     return new DynamoDBContext(client);
 });
 
-// Repositories
-builder.Services.AddSingleton<IUserRepository, UserRepository>();
-builder.Services.AddSingleton<IAuthSessionRepository, AuthSessionRepository>();
-builder.Services.AddSingleton<IProjectRepository, ProjectRepository>();
-builder.Services.AddSingleton<IProjectMemberRepository, ProjectMemberRepository>();
-builder.Services.AddSingleton<ITaskRepository, TaskRepository>();
-builder.Services.AddSingleton<ITaskFileRepository, TaskFileRepository>();
+// 2. AWS Cognito (real credentials từ appsettings)
+var cognitoCredentials = new BasicAWSCredentials(
+    awsConfig["AccessKey"], 
+    awsConfig["SecretKey"]);
+var cognitoConfig = new AmazonCognitoIdentityProviderConfig 
+{ 
+    RegionEndpoint = RegionEndpoint.GetBySystemName(awsConfig["Region"])
+};
 
-// Services
-builder.Services.AddSingleton<AuthService>();
-builder.Services.AddSingleton<IEmailService, EmailService>();
-builder.Services.AddSingleton<IGoogleAuthService, GoogleAuthService>();
-builder.Services.AddSingleton<ProjectService>();
-builder.Services.AddSingleton<ProjectMemberService>();
-builder.Services.AddSingleton<TaskService>();
-builder.Services.AddSingleton<TaskFileService>();
+builder.Services.AddSingleton<IAmazonCognitoIdentityProvider>(_ => 
+    new AmazonCognitoIdentityProviderClient(cognitoCredentials, cognitoConfig));
+builder.Services.AddScoped<ICognitoAuthService, CognitoAuthService>();
+
+// Repositories - Scoped
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<IAuthSessionRepository, AuthSessionRepository>();
+builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
+builder.Services.AddScoped<IProjectMemberRepository, ProjectMemberRepository>();
+builder.Services.AddScoped<ITaskRepository, TaskRepository>();
+builder.Services.AddScoped<ITaskFileRepository, TaskFileRepository>();
+
+// Services - Scoped
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<IEmailService, EmailService>();
+builder.Services.AddScoped<IGoogleAuthService, GoogleAuthService>();
+builder.Services.AddScoped<ProjectService>();
+builder.Services.AddScoped<ProjectMemberService>();
+builder.Services.AddScoped<TaskService>();
+builder.Services.AddScoped<TaskFileService>();
 builder.Services.AddScoped<UserService>();
 
-// File storage (Local)
+// File storage
 builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
-
-
-
 
 // JWT Authentication Configuration
 var jwtSettings = builder.Configuration.GetSection("JWT");
@@ -99,21 +109,18 @@ builder.Services.AddCors(options =>
 
 var app = builder.Build();
 
-// Chỉ bật Swagger khi dev
+// Configure pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
 
-// Add CORS middleware - must come before authentication and authorization
 app.UseCors("AllowFrontend");
 app.UseHttpsRedirection();
 app.UseAuthentication();
 app.UseAuthorization();
-
-// Static files (uploads)
-app.UseStaticFiles(); // phục vụ wwwroot + /uploads
+app.UseStaticFiles();
 
 app.MapControllers();
 

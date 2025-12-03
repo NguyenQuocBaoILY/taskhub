@@ -1,4 +1,4 @@
-using BLL.DTOs;
+﻿using BLL.DTOs;
 using BLL.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -134,6 +134,61 @@ namespace Web_API.AppHost.Controllers
             var result = await _authService.ResetPasswordAsync(request);
             
             return result.User != null 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost("cognito-register")]
+        public async Task<IActionResult> CognitoRegister([FromBody] RegisterRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.RegisterWithCognitoAsync(request); // ✅ Đúng
+            
+            return result.User != null 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost("cognito-login")]
+        public async Task<IActionResult> CognitoLogin([FromBody] LoginRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var ipAddress = GetIpAddress();
+            var userAgent = Request.Headers["User-Agent"].ToString();
+
+            var result = await _authService.CognitoLoginAsync(request, ipAddress, userAgent);
+            
+            return !string.IsNullOrEmpty(result.AccessToken) 
+                ? Ok(result) 
+                : Unauthorized(new { message = result.Message });
+        }
+
+        [HttpPost("cognito-confirm")]
+        public async Task<IActionResult> CognitoConfirmSignUp([FromBody] CognitoConfirmSignUpRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.ConfirmCognitoSignUpAsync(request);
+            
+            return result.Success 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost("cognito-resend-confirmation")]
+        public async Task<IActionResult> ResendConfirmationCode([FromBody] CognitoResendConfirmationRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.ResendCognitoConfirmationCodeAsync(request);
+            
+            return result.Success 
                 ? Ok(result) 
                 : BadRequest(new { message = result.Message });
         }
