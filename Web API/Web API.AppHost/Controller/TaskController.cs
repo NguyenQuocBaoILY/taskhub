@@ -63,6 +63,9 @@ namespace WebAPI.APPHost.Controllers
 
                 if (!isManager(member))
                     assignee = userId;
+            } else
+            {
+                assignee = null;
             }
 
             var tasks = await _taskService.ListTasksAsync(projectId, status, assignee);
