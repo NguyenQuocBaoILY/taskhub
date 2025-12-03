@@ -247,10 +247,10 @@ namespace WebAPI.APPHost.Controllers
         [HttpPost("{taskId}/files")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<TaskFileModel>> UploadFile(
-     [FromRoute] string taskId,
-     [FromQuery] string projectId,
-     [FromQuery] string userId,
-     IFormFile file)
+             [FromRoute] string taskId,
+             [FromQuery] string projectId,
+             [FromQuery] string userId,
+             IFormFile file)
         {
             if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
                 return BadRequest("taskId, projectId, userId required");
@@ -321,10 +321,13 @@ namespace WebAPI.APPHost.Controllers
                 return NoContent();
             }
 
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
+            if (task == null) return NotFound("Task not found");
+
             var member = await _memberService.GetProjectMemberAsync(projectId, userId);
             if (member == null) return Forbid();
 
-            if (!isManager(member))
+            if (!isManager(member) && !isAssignee(task, userId))
                 return Forbid();
 
             var ok = await _taskFileService.DeleteAsync(fileId);
