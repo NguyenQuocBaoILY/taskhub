@@ -481,7 +481,7 @@ namespace BLL.Services
                 Subject = new ClaimsIdentity(new[]
                 {
                     new Claim("userId", user.UserId),
-                    new Claim("username", user.Username),
+                    new Claim("name", user.Name),
                     new Claim("email", user.Email),
                     new Claim("authProvider", user.AuthProvider),
                     new Claim("isAdmin", user.IsAdmin.ToString().ToLower()) // Default role
