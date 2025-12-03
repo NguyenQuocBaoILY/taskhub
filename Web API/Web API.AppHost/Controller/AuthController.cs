@@ -108,8 +108,8 @@ namespace Web_API.AppHost.Controllers
             var userId = User.FindFirst("userId")?.Value;
             var username = User.FindFirst("username")?.Value;
             var email = User.FindFirst("email")?.Value;
-
-            return Ok(new { userId, username, email });
+            var isAdmin = User.FindFirst("isAdmin")?.Value;
+            return Ok(new { userId, username, email, isAdmin});
         }
 
         [HttpPost("forgot-password")]
