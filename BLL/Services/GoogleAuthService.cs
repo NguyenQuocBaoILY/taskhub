@@ -30,8 +30,8 @@ namespace BLL.Services
                     Email = payload.Email,
                     Name = payload.Name,
                     Picture = payload.Picture,
-                    GivenName = payload.GivenName,
-                    FamilyName = payload.FamilyName
+                    EmailVerified = payload.EmailVerified
+                    // Removed GivenName and FamilyName as they don't exist in GoogleJsonWebSignature.Payload
                 };
             }
             catch (InvalidJwtException)
@@ -43,12 +43,12 @@ namespace BLL.Services
 
     public class GoogleUserInfo
     {
-        public string Email { get; set; }
-        public string Name { get; set; }
-        public string Picture { get; set; }
+        public string Email { get; set; } = string.Empty;
+        public string Name { get; set; } = string.Empty;
+        public string Picture { get; set; } = string.Empty;
         public bool EmailVerified { get; set; }
-        public string GoogleId { get; set; }
-        public string GivenName { get; set; }
-        public string FamilyName { get; set; }
+        public string GoogleId { get; set; } = string.Empty;
+        public string GivenName { get; set; } = string.Empty;
+        public string FamilyName { get; set; } = string.Empty;
     }
 }
