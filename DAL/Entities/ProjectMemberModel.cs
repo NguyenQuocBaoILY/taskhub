@@ -26,6 +26,9 @@ namespace DAL.Entities
         [DynamoDBProperty]
         public string Role { get; set; }
 
+        [DynamoDBProperty]
+        public bool IsAdmin { get; set; }
+
         // granular permissions saved as string set
         [DynamoDBProperty]
         public List<string> Permissions { get; set; }

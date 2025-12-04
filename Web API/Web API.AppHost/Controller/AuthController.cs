@@ -106,10 +106,10 @@ namespace Web_API.AppHost.Controllers
         public IActionResult GetCurrentUser()
         {
             var userId = User.FindFirst("userId")?.Value;
-            var username = User.FindFirst("username")?.Value;
+            var name = User.FindFirst("name")?.Value;
             var email = User.FindFirst("email")?.Value;
-
-            return Ok(new { userId, username, email });
+            var isAdmin = User.FindFirst("isAdmin")?.Value;
+            return Ok(new { userId, name, email, isAdmin});
         }
 
         [HttpPost("forgot-password")]

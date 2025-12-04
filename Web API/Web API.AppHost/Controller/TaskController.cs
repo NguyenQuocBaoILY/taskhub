@@ -1,11 +1,11 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using BLL.Services;
+using DAL.Entities;
+using Microsoft.AspNetCore.Http;
+using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using DAL.Entities;
-using DAL.Interfaces;
-using BLL.Services;
-using Microsoft.AspNetCore.Http;
+using BLL.DTOs;
 
 namespace WebAPI.APPHost.Controllers
 {
@@ -13,19 +13,38 @@ namespace WebAPI.APPHost.Controllers
     [Route("api/task")]
     public class TaskController : ControllerBase
     {
-        private readonly ITaskRepository _taskRepo;
         private readonly ProjectMemberService _memberService;
         private readonly TaskFileService _taskFileService;
+        private readonly TaskService _taskService;
 
         public TaskController(
-            ITaskRepository taskRepo,
+            TaskService taskService,
             ProjectMemberService memberService,
             TaskFileService taskFileService)
         {
-            _taskRepo = taskRepo;
+            _taskService = taskService;
             _memberService = memberService;
             _taskFileService = taskFileService;
         }
+
+        private bool isAdmin()
+        {
+            return User?.FindFirst("isAdmin")?.Value == "1";
+        }
+
+        private bool isManager(ProjectMemberModel member)
+        {
+            return member != null &&
+                   string.Equals(member.Role, "manager", StringComparison.OrdinalIgnoreCase);
+        }
+
+        private bool isAssignee(TaskModel task, string userId)
+        {
+            return task != null &&
+                   !string.IsNullOrEmpty(task.Assignee) &&
+                   string.Equals(task.Assignee, userId, StringComparison.OrdinalIgnoreCase);
+        }
+
 
         [HttpGet]
         public async Task<ActionResult<List<TaskModel>>> ListTasks(
@@ -37,10 +56,19 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
                 return BadRequest("projectId & userId required");
 
-            var member = await _memberService.GetProjectMemberAsync(projectId, userId);
-            if (member == null) return Forbid();
+            if (!isAdmin())
+            {
+                var member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null) return Forbid();
 
-            var tasks = await _taskRepo.ListTasksAsync(projectId, status, assignee);
+                if (!isManager(member))
+                    assignee = userId;
+            } else
+            {
+                assignee = null;
+            }
+
+            var tasks = await _taskService.ListTasksAsync(projectId, status, assignee);
             return Ok(tasks);
         }
 
@@ -53,11 +81,17 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
                 return BadRequest("taskId, projectId, userId required");
 
-            var member = await _memberService.GetProjectMemberAsync(projectId, userId);
-            if (member == null) return Forbid();
-
-            var task = await _taskRepo.GetTaskAsync(projectId, taskId);
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
             if (task == null) return NotFound();
+
+            if (!isAdmin())
+            {
+                var member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null) return Forbid();
+
+                if (!isManager(member) && !isAssignee(task, userId))
+                    return Forbid();
+            }
             return Ok(task);
         }
 
@@ -72,11 +106,20 @@ namespace WebAPI.APPHost.Controllers
             if (task == null || string.IsNullOrEmpty(task.Title))
                 return BadRequest("Title required");
 
+            ProjectMemberModel member = null;
+
+            if (!isAdmin())
+            {
+                member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null || !isManager(member))
+                    return Forbid();
+            }
+
             task.ProjectId = projectId;
             if (string.IsNullOrEmpty(task.Assignee))
                 task.Assignee = userId;
 
-            var created = await _taskRepo.CreateTaskAsync(task);
+            var created = await _taskService.CreateTaskAsync(task);
             return Ok(created);
         }
 
@@ -84,13 +127,23 @@ namespace WebAPI.APPHost.Controllers
         public async Task<ActionResult<TaskModel>> UpdateTask(
             [FromRoute] string taskId,
             [FromQuery] string projectId,
+            [FromQuery] string userId,
             [FromBody] TaskModel task)
         {
-            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId))
+            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(userId))
                 return BadRequest("projectId & taskId required");
             if (task == null) return BadRequest("Body required");
 
-            var existing = await _taskRepo.GetTaskAsync(projectId, taskId);
+            ProjectMemberModel member = null;
+
+            if (!isAdmin())
+            {
+                member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null || !isManager(member))
+                    return Forbid();
+            }
+
+            var existing = await _taskService.GetTaskAsync(projectId, taskId);
             if (existing == null) return NotFound();
 
             existing.Title = task.Title ?? existing.Title;
@@ -101,7 +154,7 @@ namespace WebAPI.APPHost.Controllers
             existing.AssignedAt = string.IsNullOrEmpty(existing.AssignedAt) ? DateTime.UtcNow.ToString("o") : existing.AssignedAt;
             existing.Status = string.IsNullOrEmpty(task.Status) ? existing.Status : task.Status;
 
-            var updated = await _taskRepo.UpdateTaskAsync(existing);
+            var updated = await _taskService.UpdateTaskAsync(existing);
             return Ok(updated);
         }
 
@@ -109,16 +162,31 @@ namespace WebAPI.APPHost.Controllers
         public async Task<IActionResult> PatchStatus(
             [FromRoute] string taskId,
             [FromQuery] string projectId,
-            [FromBody] dynamic body)
+            [FromQuery] string userId,
+            [FromBody] PatchStatusRequest body)
         {
-            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId))
+            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(userId))
                 return BadRequest("projectId & taskId required");
 
-            string newStatus = body?.status;
+            string newStatus = body.Status;
             if (string.IsNullOrEmpty(newStatus))
                 return BadRequest("status required");
 
-            var ok = await _taskRepo.UpdateStatusAsync(projectId, taskId, newStatus);
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
+            if (task == null) return NotFound();
+
+            if (!isAdmin())
+            {
+                var member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null)
+                    return Forbid();
+
+                if (!isManager(member) && !isAssignee(task, userId))
+                    return Forbid();
+            }
+
+
+            var ok = await _taskService.UpdateStatusAsync(projectId, taskId, newStatus);
             if (!ok) return NotFound();
             return NoContent();
         }
@@ -126,12 +194,21 @@ namespace WebAPI.APPHost.Controllers
         [HttpDelete("{taskId}")]
         public async Task<IActionResult> DeleteTask(
             [FromRoute] string taskId,
+            [FromQuery] string userId,
             [FromQuery] string projectId)
         {
-            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId))
+            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(userId))
                 return BadRequest("projectId & taskId required");
 
-            var ok = await _taskRepo.DeleteTaskAsync(projectId, taskId);
+            ProjectMemberModel member = null;
+
+            if (!isAdmin())
+            {
+                member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null || !isManager(member)) return Forbid();
+            }
+
+            var ok = await _taskService.DeleteTaskAsync(projectId, taskId);
             if (!ok) return NotFound();
             return NoContent();
         }
@@ -145,8 +222,26 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
                 return BadRequest("taskId, projectId, userId required");
 
+            if (isAdmin())
+            {
+                var filesAdmin = await _taskFileService.ListAsync(taskId);
+                return Ok(filesAdmin);
+            }
+
             var member = await _memberService.GetProjectMemberAsync(projectId, userId);
             if (member == null) return Forbid();
+
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
+            if (task == null) return NotFound("Task not found");
+
+            if (isManager(member))
+            {
+                var filesManager = await _taskFileService.ListAsync(taskId);
+                return Ok(filesManager);
+            }
+
+            if (!isAssignee(task, userId))
+                return Forbid();
 
             var files = await _taskFileService.ListAsync(taskId);
             return Ok(files);
@@ -155,16 +250,41 @@ namespace WebAPI.APPHost.Controllers
         [HttpPost("{taskId}/files")]
         [Consumes("multipart/form-data")]
         public async Task<ActionResult<TaskFileModel>> UploadFile(
-            [FromRoute] string taskId,
-            [FromQuery] string projectId,
-            [FromQuery] string userId,
-            IFormFile file) // bỏ [FromForm] ở đây
+             [FromRoute] string taskId,
+             [FromQuery] string projectId,
+             [FromQuery] string userId,
+             IFormFile file)
         {
             if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
                 return BadRequest("taskId, projectId, userId required");
 
             if (file == null || file.Length == 0)
                 return BadRequest("No file uploaded");
+
+            if (isAdmin())
+            {
+                var taskAdmin = await _taskService.GetTaskAsync(projectId, taskId);
+                if (taskAdmin == null) return NotFound("Task not found");
+
+                var savedAdmin = await _taskFileService.UploadAsync(
+                    taskId,
+                    projectId,
+                    userId,
+                    file.FileName,
+                    file.ContentType ?? "application/octet-stream",
+                    file.OpenReadStream());
+
+                return Ok(savedAdmin);
+            }
+
+            var member = await _memberService.GetProjectMemberAsync(projectId, userId);
+            if (member == null) return Forbid();
+
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
+            if (task == null) return NotFound("Task not found");
+
+            if (!isManager(member) && !isAssignee(task, userId))
+                return Forbid();
 
             var saved = await _taskFileService.UploadAsync(
                 taskId,
@@ -177,16 +297,45 @@ namespace WebAPI.APPHost.Controllers
             return Ok(saved);
         }
 
+
         [HttpDelete("{taskId}/files/{fileId}")]
         public async Task<IActionResult> DeleteFile(
             [FromRoute] string taskId,
-            [FromRoute] string fileId)
+            [FromRoute] string fileId,
+            [FromQuery] string projectId,
+            [FromQuery] string userId)
         {
-            if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(fileId))
-                return BadRequest("taskId & fileId required");
+            if (string.IsNullOrEmpty(taskId) ||
+                string.IsNullOrEmpty(fileId) ||
+                string.IsNullOrEmpty(projectId) ||
+                string.IsNullOrEmpty(userId))
+            {
+                return BadRequest("taskId, fileId, projectId, userId required");
+            }
+
+            var file = await _taskFileService.GetFileAsync(fileId);
+            if (file == null || file.TaskId != taskId)
+                return NotFound();
+
+            if (isAdmin())
+            {
+                var okAdmin = await _taskFileService.DeleteAsync(fileId);
+                if (!okAdmin) return NotFound();
+                return NoContent();
+            }
+
+            var task = await _taskService.GetTaskAsync(projectId, taskId);
+            if (task == null) return NotFound("Task not found");
+
+            var member = await _memberService.GetProjectMemberAsync(projectId, userId);
+            if (member == null) return Forbid();
+
+            if (!isManager(member) && !isAssignee(task, userId))
+                return Forbid();
 
             var ok = await _taskFileService.DeleteAsync(fileId);
             if (!ok) return NotFound();
+
             return NoContent();
         }
     }

@@ -73,5 +73,12 @@ namespace BLL.Services
             await _storage.DeleteAsync(found.StoreName);
             return await _repo.DeleteFileAsync(fileId);
         }
+
+        public Task<TaskFileModel> GetFileAsync(string fileId)
+        {
+            return string.IsNullOrWhiteSpace(fileId)
+                ? Task.FromResult<TaskFileModel>(null)
+                : _repo.GetFileAsync(fileId);
+        }
     }
 }

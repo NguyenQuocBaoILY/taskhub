@@ -14,9 +14,9 @@ namespace BLL.Services
             _taskRepository = taskRepository;
         }
 
-        public async Task<List<TaskModel>> ListTasksAsync(string projectId, string status)
+        public async Task<List<TaskModel>> ListTasksAsync(string projectId, string status,string assignee)
         {
-            return await _taskRepository.ListTasksAsync(projectId, status);
+            return await _taskRepository.ListTasksAsync(projectId, status, assignee);
         }
 
         public async Task<TaskModel> CreateTaskAsync(TaskModel task)
@@ -34,6 +34,36 @@ namespace BLL.Services
         public async Task<bool> DeleteTaskAsync(string taskId, string projectId)
         {
             return await _taskRepository.DeleteTaskAsync(taskId, projectId);
+        }
+
+        public async Task<TaskModel> GetTaskAsync(string projectId, string taskId)
+        {
+            return await _taskRepository.GetTaskAsync(projectId, taskId);
+        }
+
+        public async Task<bool> UpdateStatusAsync(string projectId, string taskId, string newStatus)
+        {
+            return await _taskRepository.UpdateStatusAsync(projectId, taskId, newStatus);
+        }
+
+        public async Task<List<TaskModel>> ListTasksByAssigneeAsync(string assignee, string projectId = null, string status = null)
+        {
+            return await _taskRepository.ListTasksByAssigneeAsync(assignee, projectId, status);
+        }
+
+        public async Task<List<TaskModel>> ListTasksByProjectAsync(string projectId)
+        {
+            return await _taskRepository.ListTasksAsync(projectId);
+        }
+
+        public async Task<List<TaskModel>> ListTasksByStatusAsync(string projectId, string status)
+        {
+            return await _taskRepository.ListTasksAsync(projectId, status);
+        }
+
+        public async Task<List<TaskModel>> ListTasksByAssigneeAsync(string assignee)
+        {
+            return await _taskRepository.ListTasksByAssigneeAsync(assignee);
         }
     }
 }

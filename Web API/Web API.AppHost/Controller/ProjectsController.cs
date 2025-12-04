@@ -25,6 +25,16 @@ namespace Web_API.AppHost.Controllers
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
         }
 
+        private async Task<bool> isAdminAsync()
+        {
+            var UserId = User.FindFirst("userId")?.Value;
+            if (string.IsNullOrEmpty(UserId))
+                return false;
+            var user = await _userService.GetUserByIdAsync(UserId);
+            return user?.IsAdmin == true;
+        }
+
+
         // GET /api/projects?search=...
         [HttpGet]
         public async Task<ActionResult<IEnumerable<ProjectModel>>> GetProjects([FromQuery] string? search)
@@ -47,6 +57,11 @@ namespace Web_API.AppHost.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateProject([FromBody] CreateProjectRequest request)
         {
+            if(!await isAdminAsync())
+            {
+                return Forbid();
+            }
+
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
@@ -66,6 +81,11 @@ namespace Web_API.AppHost.Controllers
             [FromRoute] string projectId,
             [FromBody] ProjectModel project)
         {
+            if (!await isAdminAsync())
+            {
+                return Forbid();
+            }
+
             if (string.IsNullOrEmpty(projectId) || project == null)
                 return BadRequest(new { message = "projectId and body are required" });
 
@@ -90,6 +110,11 @@ namespace Web_API.AppHost.Controllers
         [HttpDelete("{projectId}")]
         public async Task<ActionResult> DeleteProject([FromRoute] string projectId)
         {
+            if (!await isAdminAsync())
+            {
+                return Forbid();
+            }
+
             if (string.IsNullOrEmpty(projectId))
                 return BadRequest(new { message = "projectId required" });
 

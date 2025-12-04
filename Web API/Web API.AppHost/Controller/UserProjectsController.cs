@@ -1,8 +1,5 @@
-using Amazon.DynamoDBv2.DocumentModel;
 using BLL.Services;
 using DAL.Entities;
-using DAL.Interfaces;
-using k8s.KubeConfigModels;
 using Microsoft.AspNetCore.Mvc;
 using System.Linq;
 using System.Threading.Tasks;

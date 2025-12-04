@@ -99,5 +99,21 @@ namespace Web_API.AppHost.Controllers
 
             return Ok(new { message = "Deleted" });
         }
+
+        [HttpGet("me")]
+        public async Task<ActionResult> GetMyProjectMember([FromRoute] string projectId)
+        {
+            if(string.IsNullOrEmpty(projectId)) 
+            return BadRequest(new { message = "projectId is required" });
+
+            var userId = User?.FindFirst("userId")?.Value;
+            if (string.IsNullOrEmpty(userId))
+                return Unauthorized(new { message = "User not authenticated" });
+
+            var member = await _projectMemberService.GetProjectMemberAsync(projectId, userId);
+            if (member == null)
+                return NotFound(new { message = "Member not found" });
+            return Ok(member);
+        }
     }
 }

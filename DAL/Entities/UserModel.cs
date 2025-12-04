@@ -94,6 +94,9 @@ namespace DAL.Entities
         [DynamoDBProperty]
         public string PasswordResetTokenExpiry { get; set; }
 
+        [DynamoDBProperty]
+        public bool IsAdmin { get; set; }
+
         // GSI1 - Email Lookup
         [DynamoDBGlobalSecondaryIndexHashKey("GSI1-EmailLookup")]
         public string GSI1PK { get; set; }
