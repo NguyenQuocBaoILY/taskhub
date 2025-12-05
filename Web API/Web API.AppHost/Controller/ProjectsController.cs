@@ -7,6 +7,7 @@ using BLL.Services;
 using BLL.DTOs;
 using DAL.Entities;
 using DAL.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Web_API.AppHost.Controllers
 {

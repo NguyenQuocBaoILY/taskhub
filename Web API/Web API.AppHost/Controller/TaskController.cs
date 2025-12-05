@@ -1,11 +1,12 @@
-﻿using BLL.Services;
+﻿using BLL.DTOs;
+using BLL.Services;
 using DAL.Entities;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
 using System;
 using System.Collections.Generic;
 using System.Threading.Tasks;
-using BLL.DTOs;
 
 namespace WebAPI.APPHost.Controllers
 {
@@ -29,7 +30,8 @@ namespace WebAPI.APPHost.Controllers
 
         private bool isAdmin()
         {
-            return User?.FindFirst("isAdmin")?.Value == "1";
+            var raw = User?.FindFirst("isAdmin")?.Value;
+            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
         }
 
         private bool isManager(ProjectMemberModel member)
@@ -56,6 +58,10 @@ namespace WebAPI.APPHost.Controllers
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
                 return BadRequest("projectId & userId required");
 
+            Console.WriteLine($"[ListTasks] isAdmin() = {isAdmin()}");
+            Console.WriteLine($"[ListTasks] userId(query) = {userId}");
+            Console.WriteLine($"[ListTasks] projectId = {projectId}");
+
             if (!isAdmin())
             {
                 var member = await _memberService.GetProjectMemberAsync(projectId, userId);
@@ -63,9 +69,6 @@ namespace WebAPI.APPHost.Controllers
 
                 if (!isManager(member))
                     assignee = userId;
-            } else
-            {
-                assignee = null;
             }
 
             var tasks = await _taskService.ListTasksAsync(projectId, status, assignee);
@@ -305,38 +308,61 @@ namespace WebAPI.APPHost.Controllers
             [FromQuery] string projectId,
             [FromQuery] string userId)
         {
-            if (string.IsNullOrEmpty(taskId) ||
-                string.IsNullOrEmpty(fileId) ||
-                string.IsNullOrEmpty(projectId) ||
-                string.IsNullOrEmpty(userId))
+            if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(fileId))
             {
-                return BadRequest("taskId, fileId, projectId, userId required");
+                return BadRequest("taskId & fileId required");
             }
 
             var file = await _taskFileService.GetFileAsync(fileId);
-            if (file == null || file.TaskId != taskId)
-                return NotFound();
+            if (file == null)
+            {
+                return NotFound("File not found");
+            }
+
+            if (file.TaskId != taskId)
+            {
+                return NotFound("File does not belong to this task");
+            }
 
             if (isAdmin())
             {
                 var okAdmin = await _taskFileService.DeleteAsync(fileId);
-                if (!okAdmin) return NotFound();
+                if (!okAdmin)
+                    return NotFound("Delete failed");
+
                 return NoContent();
             }
 
+            if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
+            {
+                return BadRequest("projectId & userId required for non-admin");
+            }
+
             var task = await _taskService.GetTaskAsync(projectId, taskId);
-            if (task == null) return NotFound("Task not found");
+            if (task == null)
+            {
+                return NotFound("Task not found");
+            }
 
             var member = await _memberService.GetProjectMemberAsync(projectId, userId);
-            if (member == null) return Forbid();
+            if (member == null)
+            {
+                return Forbid();
+            }
 
             if (!isManager(member) && !isAssignee(task, userId))
+            {
                 return Forbid();
+            }
 
             var ok = await _taskFileService.DeleteAsync(fileId);
-            if (!ok) return NotFound();
+            if (!ok)
+            {
+                return NotFound("Delete failed");
+            }
 
             return NoContent();
         }
+
     }
 }

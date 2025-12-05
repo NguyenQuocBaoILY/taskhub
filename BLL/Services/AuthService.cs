@@ -484,8 +484,8 @@ namespace BLL.Services
                     new Claim("name", user.Name),
                     new Claim("email", user.Email),
                     new Claim("authProvider", user.AuthProvider),
-                    new Claim("isAdmin", user.IsAdmin.ToString().ToLower()) // Default role
-                }),
+                    new Claim("isAdmin", user.IsAdmin.ToString().ToLower())
+            }),
                 Expires = DateTime.UtcNow.AddMinutes(15), // Short-lived access token
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature),
                 Issuer = _configuration["JWT:Issuer"] ?? "TaskHub",

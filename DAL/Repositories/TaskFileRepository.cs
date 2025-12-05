@@ -37,7 +37,7 @@ namespace DAL.Repositories
                     ExpressionStatement = "GSI1PK = :pk",
                     ExpressionAttributeValues = new Dictionary<string, DynamoDBEntry>
                     {
-                        {":pk", $"TASK#{taskId}#FILE"}
+                        {":pk", $"TASK#{taskId}"}
                     }
                 }
             };
@@ -47,7 +47,13 @@ namespace DAL.Repositories
             return items.Select(m =>
             {
                 if (m.PK?.StartsWith("FILE#") == true) m.FileId = m.PK.Substring("FILE#".Length);
-                if (m.SK?.StartsWith("TASK#") == true) m.TaskId = m.SK.Substring("TASK#".Length);
+                if (m.SK?.StartsWith("TASK#") == true)
+                {
+                    // SK = TASK#<taskId>#FILE...
+                    var skVal = m.SK.Substring("TASK#".Length); // <taskId>#FILE...
+                    var hashIndex = skVal.IndexOf('#');
+                    m.TaskId = hashIndex > 0 ? skVal[..hashIndex] : skVal;
+                }
                 return m;
             }).ToList();
         }
@@ -56,15 +62,29 @@ namespace DAL.Repositories
         {
             if (string.IsNullOrEmpty(fileId)) return null;
             var pk = $"FILE#{fileId}";
-            var sk = "TASK#"; // we don't know taskId -> need to scan? Better store a constant SK? We used SK=TASK#{taskId} so we must load with full key.
-            // Alternative: query by PK only is not supported; need full range key. We will list with scan fallback:
+
             var scan = _context.ScanAsync<TaskFileModel>(new List<ScanCondition>
             {
                 new ScanCondition("PK", ScanOperator.Equal, pk)
             });
             var all = await scan.GetRemainingAsync();
-            return all.FirstOrDefault();
+            var m = all.FirstOrDefault();
+            if (m == null) return null;
+
+            // Map lại FileId, TaskId giống ListFilesAsync
+            if (m.PK?.StartsWith("FILE#") == true)
+                m.FileId = m.PK.Substring("FILE#".Length);
+
+            if (m.SK?.StartsWith("TASK#") == true)
+            {
+                var skVal = m.SK.Substring("TASK#".Length);
+                var hashIndex = skVal.IndexOf('#');
+                m.TaskId = hashIndex > 0 ? skVal[..hashIndex] : skVal;
+            }
+
+            return m;
         }
+
 
         public async Task<bool> DeleteFileAsync(string fileId)
         {
