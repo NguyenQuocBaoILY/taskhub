@@ -12,7 +12,6 @@ using Microsoft.AspNetCore.Authorization;
 namespace Web_API.AppHost.Controllers
 {
     [ApiController]
-    [Authorize]
     [Route("api/projects")]
     public class ProjectsController : ControllerBase
     {
@@ -27,29 +26,27 @@ namespace Web_API.AppHost.Controllers
             _userService = userService ?? throw new ArgumentNullException(nameof(userService));
         }
 
-        private bool isAdmin()
+        private async Task<bool> isAdminAsync()
         {
-            var raw = User?.FindFirst("isAdmin")?.Value;
-            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+            var UserId = User.FindFirst("userId")?.Value;
+            if (string.IsNullOrEmpty(UserId))
+                return false;
+            var user = await _userService.GetUserByIdAsync(UserId);
+            return user?.IsAdmin == true;
         }
 
 
+        // GET /api/projects?search=...
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<ProjectModel>>> GetProjects()
+        public async Task<ActionResult<IEnumerable<ProjectModel>>> GetProjects([FromQuery] string? search)
         {
-            var projects = await _projectService.ListProjectsAsync();
+            var projects = await _projectService.ListProjectsAsync(search);
             return Ok(projects);
         }
 
         [HttpGet("{projectId}")]
         public async Task<IActionResult> GetProject([FromRoute] string projectId)
         {
-
-            if (!isAdmin())
-            {
-                return Forbid();
-            }
-
             if (string.IsNullOrEmpty(projectId))
                 return BadRequest(new { message = "projectId required" });
 
@@ -61,7 +58,7 @@ namespace Web_API.AppHost.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateProject([FromBody] CreateProjectRequest request)
         {
-            if(!isAdmin())
+            if (!await isAdminAsync())
             {
                 return Forbid();
             }
@@ -85,7 +82,7 @@ namespace Web_API.AppHost.Controllers
             [FromRoute] string projectId,
             [FromBody] ProjectModel project)
         {
-            if (!isAdmin())
+            if (!await isAdminAsync())
             {
                 return Forbid();
             }
@@ -114,7 +111,7 @@ namespace Web_API.AppHost.Controllers
         [HttpDelete("{projectId}")]
         public async Task<ActionResult> DeleteProject([FromRoute] string projectId)
         {
-            if (!isAdmin())
+            if (!await isAdminAsync())
             {
                 return Forbid();
             }
