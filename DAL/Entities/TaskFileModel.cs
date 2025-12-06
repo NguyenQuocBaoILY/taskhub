@@ -61,7 +61,8 @@ namespace DAL.Entities
         {
             PK = $"FILE#{FileId}";
             SK = $"TASK#{TaskId}";
-            GSI1PK = $"TASK#{TaskId}#FILE";
+
+            GSI1PK = $"TASK#{TaskId}";
             GSI1SK = $"{UploadedAt}#{FileId}";
         }
     }

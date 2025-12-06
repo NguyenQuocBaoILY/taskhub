@@ -222,14 +222,21 @@ namespace WebAPI.APPHost.Controllers
             [FromQuery] string projectId,
             [FromQuery] string userId)
         {
-            if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
-                return BadRequest("taskId, projectId, userId required");
+            if (string.IsNullOrEmpty(taskId))
+                return BadRequest("taskId is required");
+
+            var currentUserId = User.FindFirst("userId")?.Value;
+            if (string.IsNullOrEmpty(currentUserId))
+                return Unauthorized();
 
             if (isAdmin())
             {
                 var filesAdmin = await _taskFileService.ListAsync(taskId);
                 return Ok(filesAdmin);
             }
+
+            if (string.IsNullOrEmpty(projectId))
+                return BadRequest("projectId required for non-admin");
 
             var member = await _memberService.GetProjectMemberAsync(projectId, userId);
             if (member == null) return Forbid();
