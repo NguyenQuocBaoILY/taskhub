@@ -59,7 +59,7 @@ namespace BLL.DTOs
         public string Status { get; set; }
         public bool EmailVerified { get; set; }
         public string AuthProvider { get; set; }
-        public bool IsAdmin { get; set; }
+        public int IsAdmin { get; set; }
         public string CreatedAt { get; set; }
         public string LastActiveAt { get; set; }
     }

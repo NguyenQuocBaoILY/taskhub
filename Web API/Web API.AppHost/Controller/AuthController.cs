@@ -108,8 +108,11 @@ namespace Web_API.AppHost.Controllers
             var userId = User.FindFirst("userId")?.Value;
             var name = User.FindFirst("name")?.Value;
             var email = User.FindFirst("email")?.Value;
-            var isAdmin = User.FindFirst("isAdmin")?.Value;
-            return Ok(new { userId, name, email, isAdmin});
+            var isAdminClaim = User.FindFirst("isAdmin")?.Value;
+
+            bool isAdmin = isAdminClaim == "1" || isAdminClaim == "true" || isAdminClaim == "True";
+
+            return Ok(new { userId, name, email, isAdmin });
         }
 
         [HttpPost("forgot-password")]
