@@ -7,6 +7,7 @@ using BLL.Services;
 using BLL.DTOs;
 using DAL.Entities;
 using DAL.Interfaces;
+using Microsoft.AspNetCore.Authorization;
 
 namespace Web_API.AppHost.Controllers
 {
@@ -57,7 +58,7 @@ namespace Web_API.AppHost.Controllers
         [HttpPost]
         public async Task<IActionResult> CreateProject([FromBody] CreateProjectRequest request)
         {
-            if(!await isAdminAsync())
+            if (!await isAdminAsync())
             {
                 return Forbid();
             }
