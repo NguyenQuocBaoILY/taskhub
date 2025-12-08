@@ -1,0 +1,42 @@
+image: mcr.microsoft.com/dotnet/sdk:8.0
+
+stages:
+  - build
+  - deploy
+
+variables:
+  PROJECT_PATH: "WebAPI/Web_API.AppHost/API.csproj"
+  PUBLISH_DIR: "publish"
+
+before_script:
+  - apt-get update -y
+  - apt-get install -y zip awscli
+
+build_backend:
+  stage: build
+  tags:
+    - backend
+  script:
+    - echo "Restoring project..."
+    - dotnet restore "$PROJECT_PATH"
+    - echo "Publishing project..."
+    - mkdir -p "$PUBLISH_DIR"
+    - dotnet publish "$PROJECT_PATH" -c Release -o "$PUBLISH_DIR"
+    - echo "Creating ZIP package..."
+    - zip -r backend.zip "$PUBLISH_DIR"
+  artifacts:
+    paths:
+      - backend.zip
+    expire_in: 1 hour
+
+deploy_backend:
+  stage: deploy
+  dependencies:
+    - build_backend
+  tags:
+    - backend
+  script:
+    - echo "Deploying ZIP to AWS Lambda function: $LAMBDA_NAME"
+    - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://backend.zip --region "$AWS_DEFAULT_REGION"
+  only:
+    - main
