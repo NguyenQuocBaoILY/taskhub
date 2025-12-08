@@ -28,8 +28,6 @@ build_backend:
 deploy_backend:
   stage: deploy
   script:
-    - aws lambda update-function-code \
-        --function-name "$LAMBDA_NAME" \
-        --zip-file fileb://publish/backend.zip
+    - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://publish/backend.zip
   only:
     - main
