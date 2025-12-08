@@ -19,11 +19,15 @@ build_backend:
   script:
     - echo "Restoring project..."
     - dotnet restore "$PROJECT_PATH"
+
     - echo "Publishing project..."
     - mkdir -p "$PUBLISH_DIR"
     - dotnet publish "$PROJECT_PATH" -c Release -o "$PUBLISH_DIR"
+
     - echo "Creating ZIP package..."
-    - zip -r backend.zip "$PUBLISH_DIR"
+    - cd "$PUBLISH_DIR"
+    - zip -r ../backend.zip .
+    - cd ..
   artifacts:
     paths:
       - backend.zip
@@ -37,6 +41,9 @@ deploy_backend:
     - backend
   script:
     - echo "Deploying ZIP to AWS Lambda function: $LAMBDA_NAME"
-    - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://backend.zip --region "$AWS_DEFAULT_REGION"
+    - aws lambda update-function-code \
+        --function-name "$LAMBDA_NAME" \
+        --zip-file fileb://backend.zip \
+        --region "$AWS_DEFAULT_REGION"
   only:
     - main
