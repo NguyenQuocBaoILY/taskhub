@@ -55,6 +55,15 @@ string GetSecret(string key, string? fallback = null)
         ? value
         : (fallback ?? "");
 
+builder.Configuration["AWS:Cognito:ClientSecret"] =
+    GetSecret("AWS:Cognito:ClientSecret", builder.Configuration["AWS:Cognito:ClientSecret"]);
+
+builder.Configuration["GoogleAuth:ClientSecret"] =
+    GetSecret("GoogleAuth:ClientSecret", builder.Configuration["GoogleAuth:ClientSecret"]);
+
+builder.Configuration["Email:SmtpPassword"] =
+    GetSecret("Email:SmtpPassword", builder.Configuration["Email:SmtpPassword"]);
+
 // =======================
 // 1. DynamoDB (local / production)
 // =======================
@@ -88,8 +97,8 @@ builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 // 2. Cognito
 // =======================
 var cognitoCredentials = new BasicAWSCredentials(
-    GetSecret("AWS:AccessKey"),
-    GetSecret("AWS:SecretKey"));
+    GetSecret("AWS:AccessKey", awsConfig["AccessKey"]),
+    GetSecret("AWS:SecretKey", awsConfig["SecretKey"]));
 
 var cognitoConfig = new AmazonCognitoIdentityProviderConfig
 {
@@ -111,15 +120,7 @@ builder.Services.AddAWSService<IAmazonS3>();
 // =======================
 // 4. FILE STORAGE (LOCAL / S3) — FIXED VERSION
 // =======================
-if (builder.Environment.IsDevelopment())
-{
-    builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
-}
-else
-{
-    builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
-}
-
+builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
 
 // =======================
 // 5. REPOSITORIES

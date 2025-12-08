@@ -17,6 +17,7 @@ namespace BLL.Services
         {
             _storage = storage;
             _repo = repo;
+            Console.WriteLine($"[FileStorage] Using: {_storage.GetType().Name}");
         }
 
         public async Task<TaskFileModel> UploadAsync(
