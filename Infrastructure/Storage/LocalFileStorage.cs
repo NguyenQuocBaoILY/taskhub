@@ -18,10 +18,19 @@ namespace Infrastructure.Storage
         {
             _configuration = configuration;
             _logger = logger;
-            
-            // ✅ Simple path for development - no complex logic
-            _rootPath = Path.Combine(env.ContentRootPath ?? Directory.GetCurrentDirectory(), "wwwroot");
-            _uploadsPath = Path.Combine(_rootPath, "uploads");
+
+            // ✅ Nếu là Local/Dev → dùng wwwroot/uploads
+            if (env.IsDevelopment())
+            {
+                _rootPath = Path.Combine(env.ContentRootPath ?? Directory.GetCurrentDirectory(), "wwwroot");
+                _uploadsPath = Path.Combine(_rootPath, "uploads");
+            }
+            else
+            {
+                // ✅ Nếu là AWS Lambda / Production → dùng /tmp (write được)
+                _rootPath = Path.GetTempPath(); // = /tmp trên Linux/Lambda
+                _uploadsPath = Path.Combine(_rootPath, "uploads");
+            }
 
             InitializeUploadsDirectory();
         }
@@ -30,28 +39,22 @@ namespace Infrastructure.Storage
         {
             try
             {
-                if (!Directory.Exists(_uploadsPath))
-                {
-                    Directory.CreateDirectory(_uploadsPath);
-                    _logger.LogInformation($"Created uploads directory: {_uploadsPath}");
-                    
-                    // ✅ Set permissions for Linux/Mac
-                    if (!OperatingSystem.IsWindows())
-                    {
-                        SetUnixPermissions(_uploadsPath);
-                    }
-                }
+                Directory.CreateDirectory(_uploadsPath);
 
-                // ✅ Test write permission
-                TestWritePermission();
-                _logger.LogInformation($"Upload directory ready: {_uploadsPath}");
+                var testFile = Path.Combine(_uploadsPath, "test_write_permission.tmp");
+                using (var fs = File.Create(testFile)) { }
+                File.Delete(testFile);
             }
             catch (Exception ex)
             {
-                _logger.LogError(ex, $"Failed to initialize uploads directory: {_uploadsPath}");
-                throw new InvalidOperationException($"Cannot initialize uploads directory: {ex.Message}");
+                _logger.LogError(ex, $"Cannot initialize uploads directory: {_uploadsPath}");
+
+                // ✅ CHỈ throw khi local để dễ debug
+                throw new InvalidOperationException(
+                    $"Cannot initialize uploads directory: {_uploadsPath}", ex);
             }
         }
+
 
         private void TestWritePermission()
         {

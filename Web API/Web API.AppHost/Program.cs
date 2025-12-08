@@ -3,6 +3,7 @@ using Amazon.DynamoDBv2;
 using Amazon.DynamoDBv2.DataModel;
 using Amazon.Runtime;
 using Amazon.CognitoIdentityProvider;
+using Amazon.S3;
 using BLL.Services;
 using DAL.Interfaces;
 using DAL.Repositories;
@@ -18,35 +19,34 @@ using System.Text;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// ✅ AWS CONFIG - Separate credentials for different services
+// =======================
+// AWS CONFIG
+// =======================
 var awsConfig = builder.Configuration.GetSection("AWS");
-
-// 1. DynamoDB - Support both Local and AWS
 var useDynamoDbLocal = awsConfig.GetValue<bool>("UseDynamoDbLocal");
+var awsRegion = RegionEndpoint.GetBySystemName(awsConfig["Region"]);
 
 
+// =======================
+// 1. DynamoDB (local / production)
+// =======================
 if (useDynamoDbLocal)
 {
-    // DynamoDB Local for development
     var dynamoCredentials = new BasicAWSCredentials("dummy", "dummy");
     var dynamoConfig = new AmazonDynamoDBConfig { ServiceURL = awsConfig["ServiceURL"] };
+
     builder.Services.AddSingleton<IAmazonDynamoDB>(_ =>
         new AmazonDynamoDBClient(dynamoCredentials, dynamoConfig));
 }
 else
 {
-    // AWS DynamoDB for production
     var dynamoCredentials = new BasicAWSCredentials(
         awsConfig["AccessKey"],
         awsConfig["SecretKey"]);
-    var dynamoConfig = new AmazonDynamoDBConfig
-    {
-        RegionEndpoint = RegionEndpoint.GetBySystemName(awsConfig["Region"])
-    };
-    builder.Services.AddSingleton<IAmazonDynamoDB>(_ =>
-        new AmazonDynamoDBClient(dynamoCredentials, dynamoConfig));
-}
 
+    builder.Services.AddSingleton<IAmazonDynamoDB>(_ =>
+        new AmazonDynamoDBClient(dynamoCredentials, awsRegion));
+}
 
 builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 {
@@ -55,22 +55,46 @@ builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 });
 
 
-// 2. AWS Cognito (real credentials từ appsettings)
+// =======================
+// 2. Cognito
+// =======================
 var cognitoCredentials = new BasicAWSCredentials(
     awsConfig["AccessKey"],
     awsConfig["SecretKey"]);
+
 var cognitoConfig = new AmazonCognitoIdentityProviderConfig
 {
-    RegionEndpoint = RegionEndpoint.GetBySystemName(awsConfig["Region"])
+    RegionEndpoint = awsRegion
 };
-
 
 builder.Services.AddSingleton<IAmazonCognitoIdentityProvider>(_ =>
     new AmazonCognitoIdentityProviderClient(cognitoCredentials, cognitoConfig));
+
 builder.Services.AddScoped<ICognitoAuthService, CognitoAuthService>();
 
 
-// Repositories - Scoped
+// =======================
+// 3. S3 client
+// =======================
+builder.Services.AddAWSService<IAmazonS3>();
+
+
+// =======================
+// 4. FILE STORAGE (LOCAL / S3) — FIXED VERSION
+// =======================
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+}
+else
+{
+    builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
+}
+
+
+// =======================
+// 5. REPOSITORIES
+// =======================
 builder.Services.AddScoped<IUserRepository, UserRepository>();
 builder.Services.AddScoped<IAuthSessionRepository, AuthSessionRepository>();
 builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
@@ -79,7 +103,9 @@ builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ITaskFileRepository, TaskFileRepository>();
 
 
-// Services - Scoped
+// =======================
+// 6. SERVICES
+// =======================
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<IEmailService, EmailService>();
 builder.Services.AddScoped<IGoogleAuthService, GoogleAuthService>();
@@ -90,14 +116,11 @@ builder.Services.AddScoped<TaskFileService>();
 builder.Services.AddScoped<UserService>();
 
 
-// File storage
-builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
-
-
-// JWT Authentication Configuration
+// =======================
+// 7. JWT AUTH
+// =======================
 var jwtSettings = builder.Configuration.GetSection("JWT");
-var jwtSecretKey = jwtSettings["SecretKey"] ?? "your-super-secret-jwt-key-here-make-it-long-enough-minimum-32-characters";
-
+var jwtSecretKey = jwtSettings["SecretKey"];
 
 builder.Services.AddAuthentication(opt =>
 {
@@ -112,36 +135,33 @@ builder.Services.AddAuthentication(opt =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings["Issuer"] ?? "TaskHub",
-        ValidAudience = jwtSettings["Audience"] ?? "TaskHub",
+        ValidIssuer = jwtSettings["Issuer"],
+        ValidAudience = jwtSettings["Audience"],
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecretKey)),
         ClockSkew = TimeSpan.Zero
     };
 });
 
 
-// Controllers + Swagger
+// =======================
+// 8. SWAGGER
+// =======================
 builder.Services.AddControllers();
 builder.Services.AddEndpointsApiExplorer();
+
 builder.Services.AddSwaggerGen(c =>
 {
-    c.SwaggerDoc("v1", new OpenApiInfo
-    {
-        Title = "TaskHub API",
-        Version = "v1"
-    });
+    c.SwaggerDoc("v1", new OpenApiInfo { Title = "TaskHub API", Version = "v1" });
 
-    // 👇 Quan trọng: định nghĩa Bearer JWT cho Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
-        Description = "Nhập JWT theo dạng: Bearer {token}",
+        Description = "Nhập JWT: Bearer {token}",
         Name = "Authorization",
         Type = SecuritySchemeType.ApiKey,
         Scheme = "Bearer"
     });
 
-    // 👇 Bắt Swagger tự động gắn token vào mọi request
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -153,38 +173,41 @@ builder.Services.AddSwaggerGen(c =>
                     Id = "Bearer"
                 }
             },
-            Array.Empty<string>()
+            new string[] {}
         }
     });
 });
 
-// Add CORS services
-var allowedOrigins = builder.Configuration.GetSection("App:AllowedOrigins").Get<string[]>()
-    ?? new[] { "http://localhost:5173" };
 
+// =======================
+// 9. CORS
+// =======================
+var allowedOrigins = builder.Configuration
+    .GetSection("App:AllowedOrigins")
+    .Get<string[]>() ?? new[] { "http://localhost:5173" };
 
 builder.Services.AddCors(options =>
 {
     options.AddPolicy("AllowFrontend", policy =>
     {
         policy.WithOrigins(allowedOrigins)
-              .AllowAnyHeader()
-              .AllowAnyMethod()
-              .AllowCredentials();
+        .AllowAnyHeader()
+        .AllowAnyMethod()
+        .AllowCredentials();
     });
 });
 
 
+// =======================
+// BUILD APP
+// =======================
 var app = builder.Build();
 
-
-// Configure pipeline
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
     app.UseSwaggerUI();
 }
-
 
 app.UseCors("AllowFrontend");
 app.UseHttpsRedirection();
@@ -192,8 +215,5 @@ app.UseAuthentication();
 app.UseAuthorization();
 app.UseStaticFiles();
 
-
 app.MapControllers();
-
-
 app.Run();

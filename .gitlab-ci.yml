@@ -1,24 +1,35 @@
+image: mcr.microsoft.com/dotnet/sdk:8.0
+
 stages:
   - build
   - deploy
 
 variables:
-  AWS_REGION: "ap-southeast-1"
-  STACK_NAME: "TaskHubBackend"
+  DOTNET_ROOT: "/usr/share/dotnet"
+  PROJECT_PATH: "Web API/Web API.AppHost/API.csproj"
+  PUBLISH_DIR: "publish"
 
 before_script:
-  - choco install awscli -y
+  - apt-get update
+  - apt-get install -y zip awscli
 
-build:
+build_backend:
   stage: build
   script:
-    - dotnet restore
-    - dotnet build
-    - dotnet test
+    - dotnet restore "$PROJECT_PATH"
+    - dotnet publish "$PROJECT_PATH" -c Release -o $PUBLISH_DIR
+    - cd $PUBLISH_DIR
+    - zip -r backend.zip .
+  artifacts:
+    paths:
+      - publish/backend.zip
+    expire_in: 1 hour
 
-deploy:
+deploy_backend:
   stage: deploy
   script:
-    - aws cloudformation deploy --template-file template.yaml --stack-name $STACK_NAME --capabilities CAPABILITY_IAM
+    - aws lambda update-function-code \
+        --function-name "$LAMBDA_NAME" \
+        --zip-file fileb://publish/backend.zip
   only:
-    - master
+    - main
