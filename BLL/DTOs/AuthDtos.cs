@@ -163,4 +163,40 @@ namespace BLL.DTOs
         [Required]
         public string Username { get; set; }
     }
+
+    // Cognito Forgot Password Request
+    public class CognitoForgotPasswordRequest
+    {
+        [Required]
+        public string Username { get; set; }
+    }
+
+    // Cognito Forgot Password Response
+    public class CognitoForgotPasswordResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+        public string DeliveryMedium { get; set; } // SMS hoặc EMAIL
+    }
+
+    // Cognito Confirm Forgot Password Request
+    public class CognitoConfirmForgotPasswordRequest
+    {
+        [Required]
+        public string Username { get; set; }
+
+        [Required]
+        public string ConfirmationCode { get; set; }
+
+        [Required]
+        [MinLength(6)]
+        public string NewPassword { get; set; }
+    }
+
+    // Cognito Confirm Forgot Password Response
+    public class CognitoConfirmForgotPasswordResponse
+    {
+        public bool Success { get; set; }
+        public string Message { get; set; }
+    }
 }

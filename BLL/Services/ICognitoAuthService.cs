@@ -15,5 +15,9 @@ namespace BLL.Services
         // ✅ Sử dụng tên mới
         Task<CognitoConfirmSignUpResponse> ConfirmSignUpAsync(CognitoConfirmSignUpRequest request);
         Task<CognitoConfirmSignUpResponse> ResendConfirmationCodeAsync(CognitoResendConfirmationRequest request);
+        
+        // ✅ Thêm methods cho forgot password
+        Task<CognitoForgotPasswordResponse> ForgotPasswordAsync(CognitoForgotPasswordRequest request);
+        Task<CognitoConfirmForgotPasswordResponse> ConfirmForgotPasswordAsync(CognitoConfirmForgotPasswordRequest request);
     }
 }

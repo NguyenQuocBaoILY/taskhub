@@ -541,6 +541,17 @@ namespace BLL.Services
             return await _cognitoAuthService.ResendConfirmationCodeAsync(request);
         }
 
+        // ✅ Thêm methods mới cho Cognito Forgot Password
+        public async Task<CognitoForgotPasswordResponse> CognitoForgotPasswordAsync(CognitoForgotPasswordRequest request)
+        {
+            return await _cognitoAuthService.ForgotPasswordAsync(request);
+        }
+
+        public async Task<CognitoConfirmForgotPasswordResponse> CognitoConfirmForgotPasswordAsync(CognitoConfirmForgotPasswordRequest request)
+        {
+            return await _cognitoAuthService.ConfirmForgotPasswordAsync(request);
+        }
+
         private async Task<UserModel> GetOrCreateLocalUserFromCognito(CognitoUser cognitoUser)
         {
             if (cognitoUser == null || string.IsNullOrEmpty(cognitoUser.Email) || string.IsNullOrEmpty(cognitoUser.Username))

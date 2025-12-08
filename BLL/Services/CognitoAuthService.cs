@@ -1,4 +1,4 @@
-using Amazon.CognitoIdentityProvider;
+﻿using Amazon.CognitoIdentityProvider;
 using Amazon.CognitoIdentityProvider.Model;
 using Microsoft.Extensions.Configuration;
 using System.Text.Json;
@@ -121,13 +121,20 @@ namespace BLL.Services
                     return new AuthResponse { Message = "Username/Email and Password are required" };
                 }
 
+                // ✅ Debug logging
+                Console.WriteLine($"=== COGNITO LOGIN DEBUG ===");
+                Console.WriteLine($"Username: {request.UsernameOrEmail}");
+                Console.WriteLine($"UserPoolId: {_userPoolId}");
+                Console.WriteLine($"ClientId: {_clientId}");
+
                 var secretHash = ComputeSecretHash(request.UsernameOrEmail);
-                
-                var authRequest = new AdminInitiateAuthRequest
+                Console.WriteLine($"SecretHash computed successfully");
+
+                // ✅ SỬ DỤNG InitiateAuth THAY VÌ AdminInitiateAuth
+                var authRequest = new InitiateAuthRequest
                 {
-                    UserPoolId = _userPoolId,
                     ClientId = _clientId,
-                    AuthFlow = AuthFlowType.ADMIN_NO_SRP_AUTH,
+                    AuthFlow = AuthFlowType.USER_PASSWORD_AUTH,  // ✅ Thay đổi auth flow
                     AuthParameters = new Dictionary<string, string>
                     {
                         { "USERNAME", request.UsernameOrEmail },
@@ -136,7 +143,9 @@ namespace BLL.Services
                     }
                 };
 
-                var response = await _cognitoClient.AdminInitiateAuthAsync(authRequest);
+                Console.WriteLine($"Calling Cognito InitiateAuth...");
+                var response = await _cognitoClient.InitiateAuthAsync(authRequest);
+                Console.WriteLine($"Cognito response received");
 
                 if (response.ChallengeName != null && response.ChallengeName == ChallengeNameType.NEW_PASSWORD_REQUIRED)
                 {
@@ -155,28 +164,38 @@ namespace BLL.Services
                     Message = "Cognito login successful"
                 };
             }
-            catch (NotAuthorizedException)
+            catch (NotAuthorizedException ex)
             {
+                Console.WriteLine($"NotAuthorized: {ex.Message}");
                 return new AuthResponse { Message = "Invalid credentials" };
             }
-            catch (UserNotConfirmedException)
+            catch (UserNotConfirmedException ex)
             {
+                Console.WriteLine($"UserNotConfirmed: {ex.Message}");
                 return new AuthResponse { Message = "User email not verified. Please confirm your email first." };
             }
-            catch (UserNotFoundException)
+            catch (UserNotFoundException ex)
             {
+                Console.WriteLine($"UserNotFound: {ex.Message}");
                 return new AuthResponse { Message = "User not found" };
             }
-            catch (TooManyRequestsException)
+            catch (TooManyRequestsException ex)
             {
+                Console.WriteLine($"TooManyRequests: {ex.Message}");
                 return new AuthResponse { Message = "Too many requests. Please try again later." };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"Cognito login error: {ex}");
+                Console.WriteLine($"=== COGNITO LOGIN ERROR ===");
+                Console.WriteLine($"Exception Type: {ex.GetType().Name}");
+                Console.WriteLine($"Message: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                Console.WriteLine($"==========================");
                 return new AuthResponse { Message = $"Cognito login failed: {ex.Message}" };
             }
         }
+
+        // ✅ THÊM CÁC METHODS THIẾU
 
         public async Task<AuthResponse> RefreshCognitoTokenAsync(string refreshToken)
         {
@@ -460,6 +479,212 @@ namespace BLL.Services
             }
         }
 
+        public async Task<CognitoForgotPasswordResponse> ForgotPasswordAsync(CognitoForgotPasswordRequest request)
+        {
+            try
+            {
+                if (request == null)
+                {
+                    return new CognitoForgotPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Request cannot be null"
+                    };
+                }
+
+                if (string.IsNullOrEmpty(request.Username))
+                {
+                    return new CognitoForgotPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Username is required"
+                    };
+                }
+
+                var forgotPasswordRequest = new Amazon.CognitoIdentityProvider.Model.ForgotPasswordRequest
+                {
+                    ClientId = _clientId,
+                    SecretHash = ComputeSecretHash(request.Username),
+                    Username = request.Username
+                };
+
+                var response = await _cognitoClient.ForgotPasswordAsync(forgotPasswordRequest);
+
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = true,
+                    Message = "Password reset code has been sent to your registered email/phone.",
+                    DeliveryMedium = response.CodeDeliveryDetails?.DeliveryMedium?.Value ?? "EMAIL"
+                };
+            }
+            catch (UserNotFoundException)
+            {
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "User not found"
+                };
+            }
+            catch (InvalidParameterException ex)
+            {
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = $"Invalid parameter: {ex.Message}"
+                };
+            }
+            catch (LimitExceededException)
+            {
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Attempt limit exceeded. Please wait before requesting another code."
+                };
+            }
+            catch (TooManyRequestsException)
+            {
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Too many requests. Please try again later."
+                };
+            }
+            catch (NotAuthorizedException)
+            {
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Not authorized to reset password"
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Cognito forgot password error: {ex}");
+                return new CognitoForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = $"Failed to initiate password reset: {ex.Message}"
+                };
+            }
+        }
+
+        public async Task<CognitoConfirmForgotPasswordResponse> ConfirmForgotPasswordAsync(CognitoConfirmForgotPasswordRequest request)
+        {
+            try
+            {
+                if (request == null)
+                {
+                    return new CognitoConfirmForgotPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Request cannot be null"
+                    };
+                }
+
+                if (string.IsNullOrEmpty(request.Username))
+                {
+                    return new CognitoConfirmForgotPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Username is required"
+                    };
+                }
+
+                if (string.IsNullOrEmpty(request.ConfirmationCode))
+                {
+                    return new CognitoConfirmForgotPasswordResponse
+                    {
+                        Success = false,
+                        Message = "Confirmation code is required"
+                    };
+                }
+
+                if (string.IsNullOrEmpty(request.NewPassword))
+                {
+                    return new CognitoConfirmForgotPasswordResponse
+                    {
+                        Success = false,
+                        Message = "New password is required"
+                    };
+                }
+
+                var confirmForgotPasswordRequest = new Amazon.CognitoIdentityProvider.Model.ConfirmForgotPasswordRequest
+                {
+                    ClientId = _clientId,
+                    SecretHash = ComputeSecretHash(request.Username),
+                    Username = request.Username,
+                    ConfirmationCode = request.ConfirmationCode,
+                    Password = request.NewPassword
+                };
+
+                await _cognitoClient.ConfirmForgotPasswordAsync(confirmForgotPasswordRequest);
+
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = true,
+                    Message = "Password has been reset successfully. You can now login with your new password."
+                };
+            }
+            catch (ExpiredCodeException)
+            {
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Reset code has expired. Please request a new one."
+                };
+            }
+            catch (CodeMismatchException)
+            {
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Invalid reset code. Please check and try again."
+                };
+            }
+            catch (UserNotFoundException)
+            {
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "User not found"
+                };
+            }
+            catch (InvalidPasswordException)
+            {
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Password does not meet security requirements"
+                };
+            }
+            catch (TooManyFailedAttemptsException)
+            {
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Too many failed attempts. Please try again later."
+                };
+            }
+            catch (TooManyRequestsException)
+            {
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = "Too many requests. Please try again later."
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Confirm forgot password error: {ex}");
+                return new CognitoConfirmForgotPasswordResponse
+                {
+                    Success = false,
+                    Message = $"Failed to reset password: {ex.Message}"
+                };
+            }
+        }
+
+        // ✅ HELPER METHODS
         private string ComputeSecretHash(string username)
         {
             if (string.IsNullOrEmpty(username) || string.IsNullOrEmpty(_clientSecret) || string.IsNullOrEmpty(_clientId))
