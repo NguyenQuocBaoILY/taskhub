@@ -95,11 +95,7 @@ namespace DAL.Entities
         public string PasswordResetTokenExpiry { get; set; }
 
         [DynamoDBProperty]
-<<<<<<< HEAD
         public int IsAdmin { get; set; }
-=======
-        public int  IsAdmin { get; set; }
->>>>>>> master
 
         // GSI1 - Email Lookup
         [DynamoDBGlobalSecondaryIndexHashKey("GSI1-EmailLookup")]
@@ -114,5 +110,5 @@ namespace DAL.Entities
 
         [DynamoDBGlobalSecondaryIndexRangeKey("GSI6-UsernameLookup")]
         public string GSI6SK { get; set; }
-    }
+}
 }
