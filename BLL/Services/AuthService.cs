@@ -552,6 +552,52 @@ namespace BLL.Services
             return await _cognitoAuthService.ConfirmForgotPasswordAsync(request);
         }
 
+        // ✅ THÊM METHOD MỚI
+        public async Task<AuthResponse> GoogleCognitoLoginAsync(GoogleLoginRequest request, string ipAddress, string userAgent)
+        {
+            try
+            {
+                // Gọi Cognito service thay vì xử lý local
+                var cognitoResult = await _cognitoAuthService.GoogleLoginWithCognitoAsync(request.IdToken);
+                
+                if (!string.IsNullOrEmpty(cognitoResult.AccessToken))
+                {
+                    // Có thể lưu session info nếu cần
+                    var refreshToken = GenerateOpaqueRefreshToken();
+                    var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
+                    
+                    var session = new AuthSessionModel
+                    {
+                        UserId = cognitoResult.User?.Email ?? "google_user",
+                        RefreshTokenHash = refreshTokenHash,
+                        IpAddress = ipAddress,
+                        UserAgent = userAgent,
+                        ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(),
+                        CognitoAccessToken = cognitoResult.AccessToken,
+                        CognitoRefreshToken = cognitoResult.RefreshToken,
+                        AuthProvider = "GOOGLE_COGNITO"
+                    };
+                    
+                    await _authSessionRepository.CreateSessionAsync(session);
+                    
+                    return new AuthResponse
+                    {
+                        AccessToken = cognitoResult.AccessToken,
+                        RefreshToken = refreshToken,
+                        User = cognitoResult.User,
+                        Message = "Google Cognito login successful"
+                    };
+                }
+                
+                return cognitoResult;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"GoogleCognitoLogin error: {ex.Message}");
+                return new AuthResponse { Message = "Google Cognito authentication failed" };
+            }
+        }
+
         private async Task<UserModel> GetOrCreateLocalUserFromCognito(CognitoUser cognitoUser)
         {
             if (cognitoUser == null || string.IsNullOrEmpty(cognitoUser.Email) || string.IsNullOrEmpty(cognitoUser.Username))

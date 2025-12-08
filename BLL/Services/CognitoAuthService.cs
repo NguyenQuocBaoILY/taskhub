@@ -23,7 +23,7 @@ namespace BLL.Services
         {
             _cognitoClient = cognitoClient ?? throw new ArgumentNullException(nameof(cognitoClient));
             _configuration = configuration ?? throw new ArgumentNullException(nameof(configuration));
-            
+
             _clientId = _configuration["AWS:Cognito:ClientId"] ?? throw new InvalidOperationException("AWS:Cognito:ClientId is required");
             _clientSecret = _configuration["AWS:Cognito:ClientSecret"] ?? throw new InvalidOperationException("AWS:Cognito:ClientSecret is required");
             _userPoolId = _configuration["AWS:Cognito:UserPoolId"] ?? throw new InvalidOperationException("AWS:Cognito:UserPoolId is required");
@@ -49,7 +49,7 @@ namespace BLL.Services
                 }
 
                 var secretHash = ComputeSecretHash(request.Username);
-                
+
                 var signUpRequest = new SignUpRequest
                 {
                     ClientId = _clientId,
@@ -65,8 +65,8 @@ namespace BLL.Services
 
                 if (!string.IsNullOrEmpty(request.PhoneNumber))
                 {
-                    var phoneNumber = request.PhoneNumber.StartsWith("+") 
-                        ? request.PhoneNumber 
+                    var phoneNumber = request.PhoneNumber.StartsWith("+")
+                        ? request.PhoneNumber
                         : $"+84{request.PhoneNumber.TrimStart('0')}";
                     signUpRequest.UserAttributes.Add(
                         new AttributeType { Name = "phone_number", Value = phoneNumber });
@@ -194,8 +194,6 @@ namespace BLL.Services
                 return new AuthResponse { Message = $"Cognito login failed: {ex.Message}" };
             }
         }
-
-        // ✅ THÊM CÁC METHODS THIẾU
 
         public async Task<AuthResponse> RefreshCognitoTokenAsync(string refreshToken)
         {
@@ -684,6 +682,88 @@ namespace BLL.Services
             }
         }
 
+        // ✅ THÊM GOOGLE LOGIN COGNITO METHOD
+        public async Task<AuthResponse> GoogleLoginWithCognitoAsync(string googleIdToken)
+        {
+            try
+            {
+                if (string.IsNullOrEmpty(googleIdToken))
+                {
+                    return new AuthResponse { Message = "Google ID token is required" };
+                }
+
+                Console.WriteLine($"=== GOOGLE COGNITO LOGIN DEBUG ===");
+                Console.WriteLine($"Google ID Token received");
+
+                // Verify Google token trước khi gửi tới Cognito
+                var googleUser = await VerifyGoogleTokenDirectly(googleIdToken);
+                if (googleUser == null)
+                {
+                    return new AuthResponse { Message = "Invalid Google token" };
+                }
+
+                Console.WriteLine($"Google token verified for user: {googleUser.Email}");
+
+                // Sử dụng AdminInitiateAuth với email làm username
+                var authRequest = new AdminInitiateAuthRequest
+                {
+                    UserPoolId = _userPoolId,
+                    ClientId = _clientId,
+                    AuthFlow = AuthFlowType.ADMIN_NO_SRP_AUTH,
+                    AuthParameters = new Dictionary<string, string>
+                    {
+                        { "USERNAME", googleUser.Email }, // Dùng email làm username
+                        { "SECRET_HASH", ComputeSecretHash(googleUser.Email) }
+                    }
+                };
+
+                // Thử authenticate với email, nếu không có thì tạo user mới
+                try
+                {
+                    var response = await _cognitoClient.AdminInitiateAuthAsync(authRequest);
+
+                    if (response.AuthenticationResult != null)
+                    {
+                        return new AuthResponse
+                        {
+                            AccessToken = response.AuthenticationResult.AccessToken,
+                            RefreshToken = response.AuthenticationResult.RefreshToken,
+                            Message = "Google Cognito login successful",
+                            User = new UserProfile
+                            {
+                                Email = googleUser.Email,
+                                Name = googleUser.Name,
+                                AuthProvider = "GOOGLE_COGNITO",
+                                EmailVerified = true
+                            }
+                        };
+                    }
+                }
+                catch (UserNotFoundException)
+                {
+                    // User chưa tồn tại, tạo mới
+                    Console.WriteLine($"User not found, creating new user with Google profile");
+                    return await CreateCognitoUserFromGoogle(googleUser);
+                }
+                catch (NotAuthorizedException)
+                {
+                    // Có thể user chưa confirmed hoặc vấn đề khác
+                    Console.WriteLine($"User exists but not authorized, checking status");
+                }
+
+                return new AuthResponse { Message = "Google Cognito authentication failed" };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"=== GOOGLE COGNITO LOGIN ERROR ===");
+                Console.WriteLine($"Exception Type: {ex.GetType().Name}");
+                Console.WriteLine($"Message: {ex.Message}");
+                Console.WriteLine($"StackTrace: {ex.StackTrace}");
+                Console.WriteLine($"===================================");
+                return new AuthResponse { Message = $"Google Cognito login failed: {ex.Message}" };
+            }
+        }
+
         // ✅ HELPER METHODS
         private string ComputeSecretHash(string username)
         {
@@ -700,6 +780,108 @@ namespace BLL.Services
         private string GetAttributeValue(List<AttributeType> attributes, string attributeName)
         {
             return attributes?.FirstOrDefault(a => a.Name == attributeName)?.Value;
+        }
+
+        // Helper method để tạo Cognito user từ Google profile
+        private async Task<AuthResponse> CreateCognitoUserFromGoogle(GoogleUser googleUser)
+        {
+            try
+            {
+                // Tạo user mới trong Cognito với Google profile
+                var createUserRequest = new AdminCreateUserRequest
+                {
+                    UserPoolId = _userPoolId,
+                    Username = googleUser.Email,
+                    MessageAction = MessageActionType.SUPPRESS, // Không gửi email welcome
+                    UserAttributes = new List<AttributeType>
+                    {
+                        new AttributeType { Name = "email", Value = googleUser.Email },
+                        new AttributeType { Name = "name", Value = googleUser.Name },
+                        new AttributeType { Name = "email_verified", Value = "true" },
+                        new AttributeType { Name = "picture", Value = googleUser.Picture ?? "" }
+                    }
+                };
+
+                var createResponse = await _cognitoClient.AdminCreateUserAsync(createUserRequest);
+
+                // Set user status to CONFIRMED
+                var confirmUserRequest = new AdminConfirmSignUpRequest
+                {
+                    UserPoolId = _userPoolId,
+                    Username = googleUser.Email
+                };
+
+                await _cognitoClient.AdminConfirmSignUpAsync(confirmUserRequest);
+
+                // Bây giờ thử login lại
+                var authRequest = new AdminInitiateAuthRequest
+                {
+                    UserPoolId = _userPoolId,
+                    ClientId = _clientId,
+                    AuthFlow = AuthFlowType.ADMIN_NO_SRP_AUTH,
+                    AuthParameters = new Dictionary<string, string>
+                    {
+                        { "USERNAME", googleUser.Email },
+                        { "SECRET_HASH", ComputeSecretHash(googleUser.Email) }
+                    }
+                };
+
+                var authResponse = await _cognitoClient.AdminInitiateAuthAsync(authRequest);
+
+                if (authResponse.AuthenticationResult != null)
+                {
+                    return new AuthResponse
+                    {
+                        AccessToken = authResponse.AuthenticationResult.AccessToken,
+                        RefreshToken = authResponse.AuthenticationResult.RefreshToken,
+                        Message = "Google user created and logged in successfully",
+                        User = new UserProfile
+                        {
+                            UserId = createResponse.User.Username,
+                            Email = googleUser.Email,
+                            Name = googleUser.Name,
+                            AuthProvider = "GOOGLE_COGNITO",
+                            EmailVerified = true,
+                            Avatar = googleUser.Picture
+                        }
+                    };
+                }
+
+                return new AuthResponse { Message = "User created but authentication failed" };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Create Google user error: {ex}");
+                return new AuthResponse { Message = $"Failed to create Google user: {ex.Message}" };
+            }
+        }
+
+        // Helper method để verify Google token
+        private async Task<GoogleUser> VerifyGoogleTokenDirectly(string idToken)
+        {
+            try
+            {
+                var clientId = _configuration["GoogleAuth:ClientId"];
+
+                var payload = await Google.Apis.Auth.GoogleJsonWebSignature.ValidateAsync(idToken,
+                    new Google.Apis.Auth.GoogleJsonWebSignature.ValidationSettings
+                    {
+                        Audience = new[] { clientId }
+                    });
+
+                return new GoogleUser
+                {
+                    Email = payload.Email,
+                    Name = payload.Name,
+                    Picture = payload.Picture,
+                    EmailVerified = payload.EmailVerified
+                };
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Google token verification error: {ex}");
+                return null;
+            }
         }
     }
 }
