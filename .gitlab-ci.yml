@@ -3,9 +3,9 @@ stages:
   - deploy
 
 variables:
-  PROJECT_PATH: 'WebAPI/Web_API.AppHost/API.csproj'
-  PUBLISH_DIR: 'publish'
-  ZIP_FILE: 'backend.zip'
+  PROJECT_PATH: "WebAPI/Web_API.AppHost/API.csproj"
+  PUBLISH_DIR: "publish"
+  ZIP_FILE: "backend.zip"
 
 build_backend:
   stage: build
@@ -13,15 +13,15 @@ build_backend:
     - backend
   script:
     - echo "Restoring..."
-    - dotnet restore "$env:PROJECT_PATH"
+    - dotnet restore $env:PROJECT_PATH
 
     - echo "Publishing..."
-    - if (Test-Path "$env:PUBLISH_DIR") { Remove-Item "$env:PUBLISH_DIR" -Recurse -Force }
-    - dotnet publish "$env:PROJECT_PATH" -c Release -o "$env:PUBLISH_DIR"
+    - if (Test-Path $env:PUBLISH_DIR) { Remove-Item -Recurse -Force $env:PUBLISH_DIR }
+    - dotnet publish $env:PROJECT_PATH -c Release -o $env:PUBLISH_DIR
 
     - echo "Creating ZIP..."
-    - if (Test-Path "$env:ZIP_FILE") { Remove-Item "$env:ZIP_FILE" -Force }
-    - Compress-Archive -Path "$env:PUBLISH_DIR\*" -DestinationPath "$env:ZIP_FILE" -Force
+    - if (Test-Path $env:ZIP_FILE) { Remove-Item -Force $env:ZIP_FILE }
+    - Compress-Archive -Path "$env:PUBLISH_DIR\*" -DestinationPath $env:ZIP_FILE -Force
   artifacts:
     paths:
       - backend.zip
@@ -35,7 +35,7 @@ deploy_backend:
     - build_backend
   script:
     - echo "Deploying..."
-    - aws lambda update-function-code --function-name "$env:LAMBDA_NAME" --zip-file fileb://backend.zip --region "$env:AWS_DEFAULT_REGION"
+    - aws lambda update-function-code --function-name $env:LAMBDA_NAME --zip-file fileb://backend.zip --region $env:AWS_DEFAULT_REGION
   only:
     - main
 
