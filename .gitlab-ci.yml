@@ -5,7 +5,7 @@ stages:
   - deploy
 
 variables:
-  PROJECT_PATH: "Web API/Web API.AppHost/API.csproj"
+  PROJECT_PATH: "WebAPI/Web_API.AppHost/API.csproj"
   PUBLISH_DIR: "publish"
 
 before_script:
