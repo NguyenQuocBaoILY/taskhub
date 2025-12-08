@@ -38,7 +38,11 @@ deploy_backend:
   dependencies:
     - build_backend
   script:
-    - echo "Deploying ZIP to AWS Lambda function: $LAMBDA_NAME"
-    - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://backend.zip --region "$AWS_DEFAULT_REGION"
+    - |
+      echo "Deploying ZIP to AWS Lambda function: $LAMBDA_NAME"
+      aws lambda update-function-code |
+        --function-name "$LAMBDA_NAME" |
+        --zip-file fileb://backend.zip |
+        --region "$AWS_DEFAULT_REGION"
   only:
     - main
