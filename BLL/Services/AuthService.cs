@@ -40,6 +40,7 @@ namespace BLL.Services
             _cognitoAuthService = cognitoAuthService;
         }
 
+        // ✅ Thêm tất cả methods bị thiếu
         public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
         {
             // Validate username and email uniqueness
@@ -91,7 +92,7 @@ namespace BLL.Services
         {
             // Try to find user by username or email
             UserModel user = null;
-            
+
             if (request.UsernameOrEmail.Contains("@"))
             {
                 user = await _userRepository.GetUserByEmailAsync(request.UsernameOrEmail);
@@ -199,17 +200,21 @@ namespace BLL.Services
                 if (validSession.AuthProvider == "COGNITO" && !string.IsNullOrEmpty(validSession.CognitoRefreshToken))
                 {
                     var cognitoRefreshResult = await _cognitoAuthService.RefreshCognitoTokenAsync(validSession.CognitoRefreshToken);
-                    
+
                     if (string.IsNullOrEmpty(cognitoRefreshResult.AccessToken))
                     {
                         return cognitoRefreshResult;
                     }
 
+                    // ✅ Cập nhật Cognito token trong session
                     validSession.CognitoAccessToken = cognitoRefreshResult.AccessToken;
-                    
+
+                    // ✅ QUAN TRỌNG: Tạo LOCAL JWT mới thay vì return Cognito token
+                    var localAccessToken = GenerateAccessToken(user);
+
                     return new AuthResponse
                     {
-                        AccessToken = cognitoRefreshResult.AccessToken,
+                        AccessToken = localAccessToken, // ✅ Return local JWT
                         RefreshToken = request.RefreshToken,
                         User = MapToUserProfile(user),
                         Message = "Cognito token refreshed successfully"
@@ -257,7 +262,7 @@ namespace BLL.Services
                 if (request.LogoutAllDevices)
                 {
                     var allSessions = await _authSessionRepository.GetUserSessionsAsync(userId);
-                    
+
                     foreach (var session in allSessions.Where(s => s.AuthProvider == "COGNITO" && !string.IsNullOrEmpty(s.CognitoAccessToken)))
                     {
                         try
@@ -269,13 +274,13 @@ namespace BLL.Services
                             // Log error but continue
                         }
                     }
-                    
+
                     return await _authSessionRepository.DeleteAllUserSessionsAsync(userId);
                 }
                 else if (!string.IsNullOrEmpty(request.RefreshToken))
                 {
                     var session = await _authSessionRepository.GetSessionByRefreshTokenAsync(request.RefreshToken);
-                    
+
                     if (session != null && session.UserId == userId)
                     {
                         return await _authSessionRepository.DeleteSessionAsync(session.SessionId);
@@ -296,22 +301,22 @@ namespace BLL.Services
             try
             {
                 var user = await _userRepository.GetUserByEmailAsync(request.Email);
-                
+
                 if (user == null)
                 {
-                    return new ForgotPasswordResponse 
-                    { 
-                        Success = true, 
-                        Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu." 
+                    return new ForgotPasswordResponse
+                    {
+                        Success = true,
+                        Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu."
                     };
                 }
 
                 if (user.Status != "ACTIVE" || user.AuthProvider != "LOCAL")
                 {
-                    return new ForgotPasswordResponse 
-                    { 
-                        Success = true, 
-                        Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu." 
+                    return new ForgotPasswordResponse
+                    {
+                        Success = true,
+                        Message = "Nếu email tồn tại trong hệ thống, bạn sẽ nhận được liên kết đặt lại mật khẩu."
                     };
                 }
 
@@ -344,7 +349,7 @@ namespace BLL.Services
             try
             {
                 var user = await _userRepository.GetUserByPasswordResetTokenAsync(request.Token);
-                
+
                 if (user == null)
                 {
                     return new AuthResponse { Message = "Token đặt lại mật khẩu không hợp lệ hoặc đã hết hạn." };
@@ -386,7 +391,7 @@ namespace BLL.Services
                 }
 
                 var existingUser = await _userRepository.GetUserByEmailAsync(googleUser.Email);
-                
+
                 if (existingUser != null)
                 {
                     if (existingUser.Status == "SUSPENDED")
@@ -491,17 +496,20 @@ namespace BLL.Services
             try
             {
                 var cognitoResult = await _cognitoAuthService.LoginWithCognitoAsync(request);
-                
+
                 if (string.IsNullOrEmpty(cognitoResult.AccessToken))
                     return cognitoResult;
-                
+
                 var cognitoUser = await _cognitoAuthService.GetUserFromTokenAsync(cognitoResult.AccessToken);
-                
+
                 var localUser = await GetOrCreateLocalUserFromCognito(cognitoUser);
-                
+
+                // ✅ THAY ĐỔI: Tạo JWT local thay vì dùng Cognito token
+                var localAccessToken = GenerateAccessToken(localUser);
+
                 var refreshToken = GenerateOpaqueRefreshToken();
                 var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
-                
+
                 var session = new AuthSessionModel
                 {
                     UserId = localUser.UserId,
@@ -509,16 +517,16 @@ namespace BLL.Services
                     IpAddress = ipAddress,
                     UserAgent = userAgent,
                     ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(),
-                    CognitoAccessToken = cognitoResult.AccessToken,
+                    CognitoAccessToken = cognitoResult.AccessToken, // Giữ lại để tham chiếu
                     CognitoRefreshToken = cognitoResult.RefreshToken,
                     AuthProvider = "COGNITO"
                 };
-                
+
                 await _authSessionRepository.CreateSessionAsync(session);
-                
+
                 return new AuthResponse
                 {
-                    AccessToken = cognitoResult.AccessToken,
+                    AccessToken = localAccessToken, // ✅ THAY ĐỔI: Return local JWT
                     RefreshToken = refreshToken,
                     User = MapToUserProfile(localUser),
                     Message = "Cognito login successful"
@@ -559,13 +567,13 @@ namespace BLL.Services
             {
                 // Gọi Cognito service thay vì xử lý local
                 var cognitoResult = await _cognitoAuthService.GoogleLoginWithCognitoAsync(request.IdToken);
-                
+
                 if (!string.IsNullOrEmpty(cognitoResult.AccessToken))
                 {
                     // Có thể lưu session info nếu cần
                     var refreshToken = GenerateOpaqueRefreshToken();
                     var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
-                    
+
                     var session = new AuthSessionModel
                     {
                         UserId = cognitoResult.User?.Email ?? "google_user",
@@ -577,9 +585,9 @@ namespace BLL.Services
                         CognitoRefreshToken = cognitoResult.RefreshToken,
                         AuthProvider = "GOOGLE_COGNITO"
                     };
-                    
+
                     await _authSessionRepository.CreateSessionAsync(session);
-                    
+
                     return new AuthResponse
                     {
                         AccessToken = cognitoResult.AccessToken,
@@ -588,7 +596,7 @@ namespace BLL.Services
                         Message = "Google Cognito login successful"
                     };
                 }
-                
+
                 return cognitoResult;
             }
             catch (Exception ex)
@@ -598,6 +606,7 @@ namespace BLL.Services
             }
         }
 
+        // ✅ THÊM TẤT CẢ PRIVATE METHODS BỊ THIẾU
         private async Task<UserModel> GetOrCreateLocalUserFromCognito(CognitoUser cognitoUser)
         {
             if (cognitoUser == null || string.IsNullOrEmpty(cognitoUser.Email) || string.IsNullOrEmpty(cognitoUser.Username))
@@ -606,18 +615,18 @@ namespace BLL.Services
             }
 
             var existingUser = await _userRepository.GetUserByEmailAsync(cognitoUser.Email);
-            
+
             if (existingUser != null)
             {
                 existingUser.AuthProvider = "COGNITO";
                 existingUser.EmailVerified = cognitoUser.EmailVerified;
                 existingUser.Status = "ACTIVE";
                 existingUser.UpdatedAt = DateTime.UtcNow.ToString("o");
-                
+
                 await _userRepository.UpdateUserAsync(existingUser);
                 return existingUser;
             }
-            
+
             var newUser = new UserModel
             {
                 Username = cognitoUser.Username,
@@ -641,10 +650,10 @@ namespace BLL.Services
         private string GenerateUsernameFromEmail(string email)
         {
             if (string.IsNullOrEmpty(email)) return "user" + Guid.NewGuid().ToString("N")[..8];
-            
+
             var emailPrefix = email.Split('@')[0];
             var cleanUsername = emailPrefix.Replace(".", "").Replace("+", "").Replace("-", "");
-            
+
             return $"{cleanUsername}{new Random().Next(1000, 9999)}";
         }
 
@@ -662,7 +671,7 @@ namespace BLL.Services
                     new Claim("email", user.Email),
                     new Claim("authProvider", user.AuthProvider),
                     new Claim("isAdmin", user.IsAdmin.ToString().ToLower())
-            }),
+                }),
                 Expires = DateTime.UtcNow.AddMinutes(15), // Short-lived access token
                 SigningCredentials = new SigningCredentials(new SymmetricSecurityKey(key), SecurityAlgorithms.HmacSha256Signature),
                 Issuer = _configuration["JWT:Issuer"] ?? "TaskHub",
