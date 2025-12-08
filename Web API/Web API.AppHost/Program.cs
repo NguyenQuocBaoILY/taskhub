@@ -15,6 +15,7 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using WebAPI.APPHost.Hubs;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,6 +54,7 @@ builder.Services.AddScoped<IProjectRepository, ProjectRepository>();
 builder.Services.AddScoped<IProjectMemberRepository, ProjectMemberRepository>();
 builder.Services.AddScoped<ITaskRepository, TaskRepository>();
 builder.Services.AddScoped<ITaskFileRepository, TaskFileRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
 
 // Services - Scoped
 builder.Services.AddScoped<AuthService>();
@@ -63,6 +65,7 @@ builder.Services.AddScoped<ProjectMemberService>();
 builder.Services.AddScoped<TaskService>();
 builder.Services.AddScoped<TaskFileService>();
 builder.Services.AddScoped<UserService>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
 
 // File storage
 builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
@@ -89,8 +92,37 @@ builder.Services.AddAuthentication(opt =>
         IssuerSigningKey = new SymmetricSecurityKey(Encoding.ASCII.GetBytes(jwtSecretKey)),
         ClockSkew = TimeSpan.Zero
     };
+
+    // Thêm cho SignalR
+    opt.Events = new JwtBearerEvents
+    {
+        OnMessageReceived = context =>
+        {
+            var accessToken = context.Request.Query["access_token"];
+            var path = context.HttpContext.Request.Path;
+            if (!string.IsNullOrEmpty(accessToken) && path.StartsWithSegments("/notificationHub"))
+            {
+                context.Token = accessToken;
+            }
+            return Task.CompletedTask;
+        }
+    };
 });
 
+// Thêm SignalR
+builder.Services.AddSignalR();
+
+// CORS with SignalR support
+builder.Services.AddCors(options =>
+{
+    options.AddPolicy("AllowFrontend", policy =>
+    {
+        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
+                      .AllowAnyHeader()
+                      .AllowAnyMethod()
+                      .AllowCredentials();
+    });
+});
 
 // Controllers + Swagger
 builder.Services.AddControllers();
@@ -103,7 +135,6 @@ builder.Services.AddSwaggerGen(c =>
         Version = "v1"
     });
 
-    // 👇 Quan trọng: định nghĩa Bearer JWT cho Swagger
     c.AddSecurityDefinition("Bearer", new OpenApiSecurityScheme
     {
         In = ParameterLocation.Header,
@@ -113,7 +144,6 @@ builder.Services.AddSwaggerGen(c =>
         Scheme = "Bearer"
     });
 
-    // 👇 Bắt Swagger tự động gắn token vào mọi request
     c.AddSecurityRequirement(new OpenApiSecurityRequirement
     {
         {
@@ -130,21 +160,9 @@ builder.Services.AddSwaggerGen(c =>
     });
 });
 
-// Add CORS services
-builder.Services.AddCors(options =>
-{
-    options.AddPolicy("AllowFrontend", policy =>
-    {
-        policy.WithOrigins("http://localhost:5173", "http://localhost:3000")
-                      .AllowAnyHeader()
-                      .AllowAnyMethod()
-                      .AllowCredentials();
-    });
-});
-
 var app = builder.Build();
 
-// Configure pipeline
+// Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
     app.UseSwagger();
@@ -158,5 +176,8 @@ app.UseAuthorization();
 app.UseStaticFiles();
 
 app.MapControllers();
+
+// SignalR Hub mapping
+app.MapHub<NotificationHub>("/notificationHub");
 
 app.Run();
