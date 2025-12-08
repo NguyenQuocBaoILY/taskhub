@@ -32,7 +32,7 @@ namespace Web_API.AppHost.Controllers
             if (string.IsNullOrEmpty(UserId))
                 return false;
             var user = await _userService.GetUserByIdAsync(UserId);
-            return user?.IsAdmin == true;
+            return user != null && user.IsAdmin == 1;
         }
 
 
