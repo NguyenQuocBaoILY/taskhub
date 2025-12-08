@@ -26,7 +26,6 @@ build_backend:
 
     - echo "Creating ZIP package..."
     - zip -r backend.zip "$PUBLISH_DIR"
-
   artifacts:
     paths:
       - backend.zip
@@ -34,11 +33,12 @@ build_backend:
 
 deploy_backend:
   stage: deploy
+  dependencies:
+    - build_backend
   tags:
     - backend
   script:
     - echo "Deploying ZIP to AWS Lambda function: $LAMBDA_NAME"
-    - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://backend.zip
-
+    - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://backend.zip --region "$AWS_DEFAULT_REGION"
   only:
     - main
