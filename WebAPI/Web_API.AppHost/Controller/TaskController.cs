@@ -34,6 +34,7 @@ namespace WebAPI.APPHost.Controllers
             return raw == "1";
         }
 
+
         private bool isManager(ProjectMemberModel member)
         {
             return member != null &&

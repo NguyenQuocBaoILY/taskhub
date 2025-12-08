@@ -12,8 +12,13 @@ namespace BLL.Services
         Task<bool> ValidateCognitoTokenAsync(string accessToken);
         Task<CognitoUser> GetUserFromTokenAsync(string accessToken);
         
-        // ✅ Sử dụng tên mới
         Task<CognitoConfirmSignUpResponse> ConfirmSignUpAsync(CognitoConfirmSignUpRequest request);
         Task<CognitoConfirmSignUpResponse> ResendConfirmationCodeAsync(CognitoResendConfirmationRequest request);
+        
+        Task<CognitoForgotPasswordResponse> ForgotPasswordAsync(CognitoForgotPasswordRequest request);
+        Task<CognitoConfirmForgotPasswordResponse> ConfirmForgotPasswordAsync(CognitoConfirmForgotPasswordRequest request);
+        
+        // ✅ THÊM METHOD MỚI CHO GOOGLE LOGIN
+        Task<AuthResponse> GoogleLoginWithCognitoAsync(string googleIdToken);
     }
 }

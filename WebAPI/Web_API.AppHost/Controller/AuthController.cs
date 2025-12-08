@@ -196,6 +196,46 @@ namespace Web_API.AppHost.Controllers
                 : BadRequest(new { message = result.Message });
         }
 
+        // ✅ Thêm endpoints mới cho Cognito Forgot Password
+        [HttpPost("cognito-forgot-password")]
+        public async Task<IActionResult> CognitoForgotPassword([FromBody] CognitoForgotPasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.CognitoForgotPasswordAsync(request);
+            
+            return result.Success 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost("cognito-confirm-forgot-password")]
+        public async Task<IActionResult> CognitoConfirmForgotPassword([FromBody] CognitoConfirmForgotPasswordRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.CognitoConfirmForgotPasswordAsync(request);
+            
+            return result.Success 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
+        [HttpPost("cognito-oauth-exchange")]
+        public async Task<IActionResult> CognitoOAuthExchange([FromBody] CognitoOAuthCodeRequest request)
+        {
+            if (!ModelState.IsValid)
+                return BadRequest(ModelState);
+
+            var result = await _authService.ExchangeCognitoOAuthCodeAsync(request);
+            
+            return !string.IsNullOrEmpty(result.AccessToken) 
+                ? Ok(result) 
+                : BadRequest(new { message = result.Message });
+        }
+
         private string GetIpAddress()
         {
             return Request.Headers.ContainsKey("X-Forwarded-For")
