@@ -39,5 +39,6 @@ deploy_backend:
   script:
     - echo "Deploying ZIP to AWS Lambda function: $LAMBDA_NAME"
     - aws lambda update-function-code --function-name "$LAMBDA_NAME" --zip-file fileb://backend.zip
+
   only:
     - main
