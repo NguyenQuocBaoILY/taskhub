@@ -16,6 +16,9 @@ using Microsoft.Extensions.Hosting;
 using Microsoft.IdentityModel.Tokens;
 using Microsoft.OpenApi.Models;
 using System.Text;
+using Amazon.SecretsManager;
+using Amazon.SecretsManager.Model;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -26,6 +29,31 @@ var awsConfig = builder.Configuration.GetSection("AWS");
 var useDynamoDbLocal = awsConfig.GetValue<bool>("UseDynamoDbLocal");
 var awsRegion = RegionEndpoint.GetBySystemName(awsConfig["Region"]);
 
+
+// =======================
+// LOAD SECRETS FROM AWS SECRETS MANAGER
+// =======================
+
+// Tên secret lưu trong appsettings.json cho linh hoạt:
+var secretName = builder.Configuration["Secrets:BackendConfigName"]
+                 ?? "taskhub/dev/backend-config";
+
+Dictionary<string, string> secrets = new();
+
+try
+{
+    secrets = LoadAppSecrets(secretName, awsRegion);
+    Console.WriteLine("[Secrets] Loaded successfully.");
+}
+catch
+{
+    Console.WriteLine("[Secrets] Cannot load secrets, using appsettings.");
+}
+
+string GetSecret(string key, string? fallback = null)
+    => secrets.TryGetValue(key, out var value) && !string.IsNullOrEmpty(value)
+        ? value
+        : (fallback ?? "");
 
 // =======================
 // 1. DynamoDB (local / production)
@@ -41,8 +69,9 @@ if (useDynamoDbLocal)
 else
 {
     var dynamoCredentials = new BasicAWSCredentials(
-        awsConfig["AccessKey"],
-        awsConfig["SecretKey"]);
+       GetSecret("AWS:AccessKey", awsConfig["AccessKey"]),
+       GetSecret("AWS:SecretKey", awsConfig["SecretKey"])
+   );
 
     builder.Services.AddSingleton<IAmazonDynamoDB>(_ =>
         new AmazonDynamoDBClient(dynamoCredentials, awsRegion));
@@ -59,8 +88,8 @@ builder.Services.AddSingleton<IDynamoDBContext>(sp =>
 // 2. Cognito
 // =======================
 var cognitoCredentials = new BasicAWSCredentials(
-    awsConfig["AccessKey"],
-    awsConfig["SecretKey"]);
+    GetSecret("AWS:AccessKey"),
+    GetSecret("AWS:SecretKey"));
 
 var cognitoConfig = new AmazonCognitoIdentityProviderConfig
 {
@@ -120,7 +149,7 @@ builder.Services.AddScoped<UserService>();
 // 7. JWT AUTH
 // =======================
 var jwtSettings = builder.Configuration.GetSection("JWT");
-var jwtSecretKey = jwtSettings["SecretKey"];
+var jwtSecretKey = GetSecret("JWT:SecretKey", jwtSettings["SecretKey"]);
 
 builder.Services.AddAuthentication(opt =>
 {
@@ -197,6 +226,28 @@ builder.Services.AddCors(options =>
     });
 });
 
+
+// =======================
+// 10. Secret Manager
+// =======================
+static Dictionary<string, string> LoadAppSecrets(string secretName, RegionEndpoint region)
+{
+    using var client = new AmazonSecretsManagerClient(region);
+
+    var request = new GetSecretValueRequest
+    {
+        SecretId = secretName
+    };
+
+    var response = client.GetSecretValueAsync(request).GetAwaiter().GetResult();
+
+    var secretString = response.SecretString;
+
+    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(secretString)
+               ?? new Dictionary<string, string>();
+
+    return dict;
+}
 
 // =======================
 // BUILD APP
