@@ -199,4 +199,14 @@ namespace BLL.DTOs
         public bool Success { get; set; }
         public string Message { get; set; }
     }
+
+    // Cognito OAuth Code Exchange Request
+    public class CognitoOAuthCodeRequest
+    {
+        [Required]
+        public string Code { get; set; }
+
+        [Required]
+        public string RedirectUri { get; set; }
+    }
 }

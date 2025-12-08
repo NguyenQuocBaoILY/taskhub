@@ -560,50 +560,117 @@ namespace BLL.Services
             return await _cognitoAuthService.ConfirmForgotPasswordAsync(request);
         }
 
-        // ✅ THÊM METHOD MỚI
-        public async Task<AuthResponse> GoogleCognitoLoginAsync(GoogleLoginRequest request, string ipAddress, string userAgent)
+        // ✅ THÊM METHOD MỚI - Exchange OAuth code for tokens
+        public async Task<AuthResponse> ExchangeCognitoOAuthCodeAsync(CognitoOAuthCodeRequest request)
         {
             try
             {
-                // Gọi Cognito service thay vì xử lý local
-                var cognitoResult = await _cognitoAuthService.GoogleLoginWithCognitoAsync(request.IdToken);
+                var cognitoDomain = _configuration["AWS:Cognito:Domain"];
+                var clientId = _configuration["AWS:Cognito:ClientId"];
+                var clientSecret = _configuration["AWS:Cognito:ClientSecret"];
 
-                if (!string.IsNullOrEmpty(cognitoResult.AccessToken))
+                using var httpClient = new HttpClient();
+                var tokenEndpoint = $"{cognitoDomain}/oauth2/token";
+
+                var requestBody = new Dictionary<string, string>
                 {
-                    // Có thể lưu session info nếu cần
-                    var refreshToken = GenerateOpaqueRefreshToken();
-                    var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(refreshToken);
+                    { "grant_type", "authorization_code" },
+                    { "client_id", clientId },
+                    { "code", request.Code },
+                    { "redirect_uri", request.RedirectUri }
+                };
 
-                    var session = new AuthSessionModel
-                    {
-                        UserId = cognitoResult.User?.Email ?? "google_user",
-                        RefreshTokenHash = refreshTokenHash,
-                        IpAddress = ipAddress,
-                        UserAgent = userAgent,
-                        ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(),
-                        CognitoAccessToken = cognitoResult.AccessToken,
-                        CognitoRefreshToken = cognitoResult.RefreshToken,
-                        AuthProvider = "GOOGLE_COGNITO"
-                    };
+                var authHeader = Convert.ToBase64String(Encoding.UTF8.GetBytes($"{clientId}:{clientSecret}"));
+                httpClient.DefaultRequestHeaders.Add("Authorization", $"Basic {authHeader}");
 
-                    await _authSessionRepository.CreateSessionAsync(session);
+                var response = await httpClient.PostAsync(tokenEndpoint, new FormUrlEncodedContent(requestBody));
+                var responseContent = await response.Content.ReadAsStringAsync();
 
-                    return new AuthResponse
-                    {
-                        AccessToken = cognitoResult.AccessToken,
-                        RefreshToken = refreshToken,
-                        User = cognitoResult.User,
-                        Message = "Google Cognito login successful"
-                    };
+                if (!response.IsSuccessStatusCode)
+                {
+                    Console.WriteLine($"Token exchange failed: {responseContent}");
+                    return new AuthResponse { Message = "Failed to exchange authorization code" };
                 }
 
-                return cognitoResult;
+                var tokenResponse = System.Text.Json.JsonSerializer.Deserialize<Dictionary<string, object>>(responseContent);
+                var idToken = tokenResponse["id_token"].ToString();
+                var accessToken = tokenResponse["access_token"].ToString();
+                var refreshToken = tokenResponse["refresh_token"].ToString();
+
+                // Decode id_token to get user info
+                var handler = new JwtSecurityTokenHandler();
+                var jwtToken = handler.ReadJwtToken(idToken);
+                
+                var email = jwtToken.Claims.FirstOrDefault(c => c.Type == "email")?.Value;
+                var name = jwtToken.Claims.FirstOrDefault(c => c.Type == "name")?.Value;
+                var sub = jwtToken.Claims.FirstOrDefault(c => c.Type == "sub")?.Value;
+
+                // Get or create local user
+                var localUser = await GetOrCreateLocalUserFromOAuth(email, name, sub);
+
+                // Generate local JWT
+                var localAccessToken = GenerateAccessToken(localUser);
+                var localRefreshToken = GenerateOpaqueRefreshToken();
+                var refreshTokenHash = BCrypt.Net.BCrypt.HashPassword(localRefreshToken);
+
+                var session = new AuthSessionModel
+                {
+                    UserId = localUser.UserId,
+                    RefreshTokenHash = refreshTokenHash,
+                    IpAddress = "oauth",
+                    UserAgent = "cognito_oauth",
+                    ExpiresAt = DateTimeOffset.UtcNow.AddDays(30).ToUnixTimeSeconds(),
+                    CognitoAccessToken = accessToken,
+                    CognitoRefreshToken = refreshToken,
+                    AuthProvider = "COGNITO_OAUTH"
+                };
+
+                await _authSessionRepository.CreateSessionAsync(session);
+
+                return new AuthResponse
+                {
+                    AccessToken = localAccessToken,
+                    RefreshToken = localRefreshToken,
+                    User = MapToUserProfile(localUser),
+                    Message = "OAuth login successful"
+                };
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"GoogleCognitoLogin error: {ex.Message}");
-                return new AuthResponse { Message = "Google Cognito authentication failed" };
+                Console.WriteLine($"ExchangeCognitoOAuthCode error: {ex.Message}");
+                return new AuthResponse { Message = $"OAuth exchange failed: {ex.Message}" };
             }
+        }
+
+        private async Task<UserModel> GetOrCreateLocalUserFromOAuth(string email, string name, string sub)
+        {
+            var existingUser = await _userRepository.GetUserByEmailAsync(email);
+
+            if (existingUser != null)
+            {
+                existingUser.AuthProvider = "COGNITO_OAUTH";
+                existingUser.EmailVerified = true;
+                existingUser.Status = "ACTIVE";
+                existingUser.UpdatedAt = DateTime.UtcNow.ToString("o");
+                await _userRepository.UpdateUserAsync(existingUser);
+                return existingUser;
+            }
+
+            var newUser = new UserModel
+            {
+                Username = GenerateUsernameFromEmail(email),
+                LowerUsername = GenerateUsernameFromEmail(email).ToLower(),
+                Email = email,
+                NormalizedEmail = email.ToLower(),
+                Name = name ?? email.Split('@')[0],
+                AuthProvider = "COGNITO_OAUTH",
+                Status = "ACTIVE",
+                EmailVerified = true,
+                Language = "vi",
+                Timezone = "Asia/Ho_Chi_Minh"
+            };
+
+            return await _userRepository.CreateUserAsync(newUser);
         }
 
         // ✅ THÊM TẤT CẢ PRIVATE METHODS BỊ THIẾU

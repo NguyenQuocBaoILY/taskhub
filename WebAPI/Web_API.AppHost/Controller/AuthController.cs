@@ -220,16 +220,13 @@ namespace Web_API.AppHost.Controllers
                 : BadRequest(new { message = result.Message });
         }
 
-        [HttpPost("google-cognito-login")]
-        public async Task<IActionResult> GoogleCognitoLogin([FromBody] GoogleLoginRequest request)
+        [HttpPost("cognito-oauth-exchange")]
+        public async Task<IActionResult> CognitoOAuthExchange([FromBody] CognitoOAuthCodeRequest request)
         {
             if (!ModelState.IsValid)
                 return BadRequest(ModelState);
 
-            var ipAddress = GetIpAddress();
-            var userAgent = Request.Headers["User-Agent"].ToString();
-
-            var result = await _authService.GoogleCognitoLoginAsync(request, ipAddress, userAgent);
+            var result = await _authService.ExchangeCognitoOAuthCodeAsync(request);
             
             return !string.IsNullOrEmpty(result.AccessToken) 
                 ? Ok(result) 
