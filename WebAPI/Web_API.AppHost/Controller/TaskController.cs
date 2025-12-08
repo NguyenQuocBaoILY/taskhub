@@ -31,8 +31,9 @@ namespace WebAPI.APPHost.Controllers
         private bool isAdmin()
         {
             var raw = User?.FindFirst("isAdmin")?.Value;
-            return string.Equals(raw, "true", StringComparison.OrdinalIgnoreCase);
+            return raw == "1";
         }
+
 
         private bool isManager(ProjectMemberModel member)
         {
