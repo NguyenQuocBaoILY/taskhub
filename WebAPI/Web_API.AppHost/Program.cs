@@ -29,6 +29,10 @@ var awsConfig = builder.Configuration.GetSection("AWS");
 var useDynamoDbLocal = awsConfig.GetValue<bool>("UseDynamoDbLocal");
 var awsRegion = RegionEndpoint.GetBySystemName(awsConfig["Region"]);
 
+Console.WriteLine($"[Config] Environment: {builder.Environment.EnvironmentName}");
+Console.WriteLine($"[Config] UseDynamoDbLocal: {useDynamoDbLocal}");
+Console.WriteLine($"[Config] AWS Region: {awsRegion?.SystemName}");
+
 
 // =======================
 // LOAD SECRETS FROM AWS SECRETS MANAGER
@@ -129,15 +133,15 @@ else
 // =======================
 // 4. FILE STORAGE (LOCAL / S3) — FIXED VERSION
 // =======================
-if (useDynamoDbLocal)
+if (builder.Environment.IsDevelopment() || useDynamoDbLocal)
 {
-    // Development: DynamoDB Local = true → dùng LocalFileStorage
+    // Development: Environment = Development OR DynamoDB Local = true → dùng LocalFileStorage
     builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
     Console.WriteLine("[FileStorage] Using LocalFileStorage for Development");
 }
 else
 {
-    // Production: DynamoDB Local = false → dùng S3FileStorage
+    // Production: Environment = Production AND DynamoDB Local = false → dùng S3FileStorage
     builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
     Console.WriteLine("[FileStorage] Using S3FileStorage for Production");
 }
