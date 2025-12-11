@@ -111,18 +111,24 @@ namespace Infrastructure.Storage
                 // Giới hạn thời gian tối đa 1 giờ để bảo mật
                 var safeExpiration = Math.Min(expirationMinutes, 60);
                 
+                // Lấy content-type từ file extension
+                var contentType = GetContentTypeFromFileName(fileName);
+                
                 var request = new GetPreSignedUrlRequest
                 {
                     BucketName = _bucketName,
                     Key = storeName,
                     Verb = HttpVerb.GET,
-                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration)
-                    // Bỏ ResponseHeaderOverrides để tránh lỗi download 0 byte
+                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration),
+                    ResponseHeaderOverrides = new ResponseHeaderOverrides
+                    {
+                        ContentType = contentType,
+                        ContentDisposition = $"attachment; filename=\"{fileName}\""
+                    }
                 };
 
                 var url = await _s3.GetPreSignedURLAsync(request);
-                // KHÔNG log URL để tránh rủi ro bảo mật
-                _logger.LogInformation($"[S3FileStorage] Generated secure pre-signed URL for file, expires in {safeExpiration} minutes");
+                _logger.LogInformation($"[S3FileStorage] Generated pre-signed URL with ContentType: {contentType}, expires in {safeExpiration} minutes");
                 return url;
             }
             catch (Exception ex)
@@ -130,6 +136,27 @@ namespace Infrastructure.Storage
                 _logger.LogError(ex, $"[S3FileStorage] Failed to generate pre-signed URL for {storeName}");
                 throw;
             }
+        }
+        
+        private string GetContentTypeFromFileName(string fileName)
+        {
+            var extension = Path.GetExtension(fileName)?.ToLowerInvariant();
+            return extension switch
+            {
+                ".txt" => "text/plain",
+                ".pdf" => "application/pdf",
+                ".doc" => "application/msword",
+                ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                ".xls" => "application/vnd.ms-excel",
+                ".xlsx" => "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                ".jpg" or ".jpeg" => "image/jpeg",
+                ".png" => "image/png",
+                ".gif" => "image/gif",
+                ".zip" => "application/zip",
+                ".json" => "application/json",
+                ".xml" => "application/xml",
+                _ => "application/octet-stream"
+            };
         }
     }
 }
