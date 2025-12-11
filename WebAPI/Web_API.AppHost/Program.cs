@@ -32,6 +32,7 @@ var awsRegion = RegionEndpoint.GetBySystemName(awsConfig["Region"]);
 Console.WriteLine($"[Config] Environment: {builder.Environment.EnvironmentName}");
 Console.WriteLine($"[Config] UseDynamoDbLocal: {useDynamoDbLocal}");
 Console.WriteLine($"[Config] AWS Region: {awsRegion?.SystemName}");
+Console.WriteLine($"[VERSION] CODE_VERSION_2025_12_11_FORCE_S3");
 
 
 // =======================
@@ -136,6 +137,8 @@ else
 // FORCE: Luôn dùng S3FileStorage trong production
 builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
 Console.WriteLine("[FileStorage] FORCED S3FileStorage for Production");
+Console.WriteLine($"[FileStorage] Deployment Time: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
+Console.WriteLine($"[FileStorage] S3 Bucket Config: {builder.Configuration["AWS:S3:BucketName"] ?? "NOT_SET"}");
 
 // =======================
 // 5. REPOSITORIES

@@ -90,8 +90,16 @@ public class StartupLambda
         services.AddScoped<TaskFileService>();
         services.AddScoped<UserService>();
 
-        // File storage
-        services.AddSingleton<IFileStorage, LocalFileStorage>();
+        // File storage - FORCE S3 for Lambda production
+        services.AddSingleton<IFileStorage, S3FileStorage>();
+        
+        // Add S3 client for production using IAM role
+        services.AddAWSService<Amazon.S3.IAmazonS3>();
+        
+        // Add logging for debugging
+        Console.WriteLine("[StartupLambda] FORCED S3FileStorage for Lambda production");
+        Console.WriteLine($"[StartupLambda] S3 Bucket: {Configuration["AWS:S3:BucketName"] ?? "NOT_SET"}");
+        Console.WriteLine($"[StartupLambda] Deployment Time: {DateTime.UtcNow:yyyy-MM-dd HH:mm:ss} UTC");
 
         // JWT Authentication
         var jwtSettings = Configuration.GetSection("JWT");
