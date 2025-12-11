@@ -131,20 +131,11 @@ else
 
 
 // =======================
-// 4. FILE STORAGE (LOCAL / S3) — FIXED VERSION
+// 4. FILE STORAGE (LOCAL / S3) — FORCE S3 IN PRODUCTION
 // =======================
-if (builder.Environment.IsDevelopment() || useDynamoDbLocal)
-{
-    // Development: Environment = Development OR DynamoDB Local = true → dùng LocalFileStorage
-    builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
-    Console.WriteLine("[FileStorage] Using LocalFileStorage for Development");
-}
-else
-{
-    // Production: Environment = Production AND DynamoDB Local = false → dùng S3FileStorage
-    builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
-    Console.WriteLine("[FileStorage] Using S3FileStorage for Production");
-}
+// FORCE: Luôn dùng S3FileStorage trong production
+builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
+Console.WriteLine("[FileStorage] FORCED S3FileStorage for Production");
 
 // =======================
 // 5. REPOSITORIES
