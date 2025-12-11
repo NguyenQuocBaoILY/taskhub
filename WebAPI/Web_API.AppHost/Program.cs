@@ -129,13 +129,15 @@ else
 // =======================
 // 4. FILE STORAGE (LOCAL / S3) — FIXED VERSION
 // =======================
-if (builder.Environment.IsDevelopment())
+if (useDynamoDbLocal)
 {
+    // Development: DynamoDB Local = true → dùng LocalFileStorage
     builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
     Console.WriteLine("[FileStorage] Using LocalFileStorage for Development");
 }
 else
 {
+    // Production: DynamoDB Local = false → dùng S3FileStorage
     builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
     Console.WriteLine("[FileStorage] Using S3FileStorage for Production");
 }
