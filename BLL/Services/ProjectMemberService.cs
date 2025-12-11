@@ -52,7 +52,7 @@ namespace BLL.Services
 
         // GET /api/projects/{projectId}/members/{userId}
         // Lấy thông tin member cụ thể trong project
-        public async Task<ProjectMemberModel> GetProjectMemberAsync(string projectId, string userId)
+        public async Task<ProjectMemberModel?> GetProjectMemberAsync(string projectId, string userId)
         {
             if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId)) return null;
 
@@ -61,7 +61,7 @@ namespace BLL.Services
 
             var user = await _userRepo.GetUserByIdAsync(userId);
             var copy = SanitizeForResponse(item);
-            copy.Username = user?.Username;
+            if (copy != null) copy.Username = user?.Username;
             return copy;
         }
 
@@ -166,7 +166,7 @@ namespace BLL.Services
         }
 
         // Helper: return shallow copy with internal DB fields nulled
-        private ProjectMemberModel SanitizeForResponse(ProjectMemberModel src)
+        private ProjectMemberModel? SanitizeForResponse(ProjectMemberModel? src)
         {
             if (src == null) return null;
             return new ProjectMemberModel
@@ -174,7 +174,7 @@ namespace BLL.Services
                 ProjectId = src.ProjectId,
                 UserId = src.UserId,
                 Role = src.Role,
-                Permissions = src.Permissions ?? ExpandPermissions(src.Role),
+                Permissions = src.Permissions ?? ExpandPermissions(src.Role ?? ""),
                 MemberStatus = src.MemberStatus,
                 JoinedAt = src.JoinedAt,
                 AddedBy = src.AddedBy,
@@ -184,13 +184,13 @@ namespace BLL.Services
                 CreatedAt = src.CreatedAt,
                 UpdatedAt = src.UpdatedAt,
                 // internal fields left null so not exposed
-                PK = null,
-                SK = null,
-                EntityType = null,
-                GSI7PK = null,
-                GSI7SK = null,
-                GSI8PK = null,
-                GSI8SK = null
+                PK = null!,
+                SK = null!,
+                EntityType = null!,
+                GSI7PK = null!,
+                GSI7SK = null!,
+                GSI8PK = null!,
+                GSI8SK = null!
             };
         }
 
