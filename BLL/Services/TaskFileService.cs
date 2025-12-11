@@ -34,10 +34,24 @@ namespace BLL.Services
                 throw new ArgumentException("projectId required");
             if (string.IsNullOrWhiteSpace(userId))
                 throw new ArgumentException("userId required");
-            if (inputStream == null || inputStream.Length == 0)
+            if (inputStream == null)
+                throw new ArgumentNullException(nameof(inputStream), "Input stream is null");
+            
+            if (inputStream.Length == 0)
                 throw new InvalidOperationException("Empty file stream");
+            
+            // Ensure stream is at beginning
+            if (inputStream.CanSeek && inputStream.Position != 0)
+            {
+                Console.WriteLine($"[Upload] Stream position was {inputStream.Position}, resetting to 0");
+                inputStream.Position = 0;
+            }
+            
+            Console.WriteLine($"[Upload] Processing file: {originalFileName}, Size: {inputStream.Length} bytes");
 
             var (storeName, url, size) = await _storage.SaveAsync(inputStream, originalFileName, contentType);
+            
+            Console.WriteLine($"[Upload] Saved to storage: {storeName}, Final size: {size} bytes");
 
             var model = new TaskFileModel
             {

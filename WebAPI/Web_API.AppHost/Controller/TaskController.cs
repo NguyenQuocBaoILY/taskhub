@@ -277,13 +277,16 @@ namespace WebAPI.APPHost.Controllers
                 var taskAdmin = await _taskService.GetTaskAsync(projectId, taskId);
                 if (taskAdmin == null) return NotFound("Task not found");
 
+                using var stream = file.OpenReadStream();
+                stream.Position = 0; // Reset position to start
+                
                 var savedAdmin = await _taskFileService.UploadAsync(
                     taskId,
                     projectId,
                     userId,
                     file.FileName,
                     file.ContentType ?? "application/octet-stream",
-                    file.OpenReadStream());
+                    stream);
 
                 return Ok(savedAdmin);
             }
@@ -297,13 +300,16 @@ namespace WebAPI.APPHost.Controllers
             if (!isManager(member) && !isAssignee(task, userId))
                 return Forbid();
 
+            using var stream = file.OpenReadStream();
+            stream.Position = 0; // Reset position to start
+            
             var saved = await _taskFileService.UploadAsync(
                 taskId,
                 projectId,
                 userId,
                 file.FileName,
                 file.ContentType ?? "application/octet-stream",
-                file.OpenReadStream());
+                stream);
 
             return Ok(saved);
         }
