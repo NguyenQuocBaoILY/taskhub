@@ -35,8 +35,7 @@ var awsRegion = RegionEndpoint.GetBySystemName(awsConfig["Region"]);
 // =======================
 
 // Tên secret lưu trong appsettings.json cho linh hoạt:
-var secretName = builder.Configuration["Secrets:BackendConfigName"]
-                 ?? "taskhub/dev/backend-config";
+var secretName = builder.Configuration["Secrets:BackendConfigName"] ?? "taskhub/dev/backend-config";
 
 Dictionary<string, string> secrets = new();
 
@@ -77,10 +76,10 @@ if (useDynamoDbLocal)
 }
 else
 {
-    var dynamoCredentials = new BasicAWSCredentials(
-       GetSecret("AWS:AccessKey", awsConfig["AccessKey"]),
-       GetSecret("AWS:SecretKey", awsConfig["SecretKey"])
-   );
+var dynamoCredentials = new BasicAWSCredentials(
+    GetSecret("AWS:AccessKey", awsConfig["AccessKey"]),
+    GetSecret("AWS:SecretKey", awsConfig["SecretKey"])
+);
 
     builder.Services.AddSingleton<IAmazonDynamoDB>(_ =>
         new AmazonDynamoDBClient(dynamoCredentials, awsRegion));
@@ -114,13 +113,32 @@ builder.Services.AddScoped<ICognitoAuthService, CognitoAuthService>();
 // =======================
 // 3. S3 client
 // =======================
-builder.Services.AddAWSService<IAmazonS3>();
+if (builder.Environment.IsDevelopment())
+{
+    // Development: Sử dụng default AWS configuration
+    builder.Services.AddAWSService<IAmazonS3>();
+}
+else
+{
+    // Production: Sử dụng IAM role của Lambda
+    builder.Services.AddSingleton<IAmazonS3>(_ =>
+        new AmazonS3Client(awsRegion));
+}
 
 
 // =======================
 // 4. FILE STORAGE (LOCAL / S3) — FIXED VERSION
 // =======================
-builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
+if (builder.Environment.IsDevelopment())
+{
+    builder.Services.AddSingleton<IFileStorage, LocalFileStorage>();
+    Console.WriteLine("[FileStorage] Using LocalFileStorage for Development");
+}
+else
+{
+    builder.Services.AddSingleton<IFileStorage, S3FileStorage>();
+    Console.WriteLine("[FileStorage] Using S3FileStorage for Production");
+}
 
 // =======================
 // 5. REPOSITORIES
@@ -244,8 +262,7 @@ static Dictionary<string, string> LoadAppSecrets(string secretName, RegionEndpoi
 
     var secretString = response.SecretString;
 
-    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(secretString)
-               ?? new Dictionary<string, string>();
+    var dict = JsonSerializer.Deserialize<Dictionary<string, string>>(secretString) ?? new Dictionary<string, string>();
 
     return dict;
 }
