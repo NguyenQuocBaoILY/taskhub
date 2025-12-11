@@ -119,16 +119,12 @@ namespace Infrastructure.Storage
                     BucketName = _bucketName,
                     Key = storeName,
                     Verb = HttpVerb.GET,
-                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration),
-                    ResponseHeaderOverrides = new ResponseHeaderOverrides
-                    {
-                        ContentType = contentType,
-                        ContentDisposition = $"attachment; filename=\"{fileName}\""
-                    }
+                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration)
+                    // Loại bỏ ResponseHeaderOverrides hoàn toàn để test
                 };
 
                 var url = await _s3.GetPreSignedURLAsync(request);
-                _logger.LogInformation($"[S3FileStorage] Generated pre-signed URL with ContentType: {contentType}, expires in {safeExpiration} minutes");
+                _logger.LogInformation($"[S3FileStorage] Generated simple pre-signed URL, expires in {safeExpiration} minutes");
                 return url;
             }
             catch (Exception ex)
