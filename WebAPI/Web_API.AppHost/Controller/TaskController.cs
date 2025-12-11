@@ -347,7 +347,13 @@ namespace WebAPI.APPHost.Controllers
             try
             {
                 var fileStream = await _taskFileService.DownloadAsync(fileId);
-                return File(fileStream, file.ContentType ?? "application/octet-stream", file.FileName);
+                
+                // Đảm bảo content-type đúng và thêm headers cần thiết
+                var contentType = file.ContentType ?? "application/octet-stream";
+                
+                Console.WriteLine($"[Download] File: {file.FileName}, ContentType: {contentType}, Size: {fileStream.Length}");
+                
+                return File(fileStream, contentType, file.FileName, enableRangeProcessing: true);
             }
             catch (Exception ex)
             {

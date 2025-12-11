@@ -43,7 +43,9 @@ namespace Infrastructure.Storage
                     BucketName = _bucketName,
                     Key = storeName,
                     InputStream = stream,
-                    ContentType = contentType
+                    ContentType = contentType,
+                    // Đảm bảo metadata được lưu
+                    ServerSideEncryptionMethod = ServerSideEncryptionMethod.AES256
                 };
 
                 await _s3.PutObjectAsync(request);
@@ -86,9 +88,14 @@ namespace Infrastructure.Storage
 
                 var response = await _s3.GetObjectAsync(request);
                 
-                _logger.LogInformation($"[S3FileStorage] Download successful - StoreName: {storeName}");
+                // Đọc toàn bộ stream để đảm bảo decryption hoàn tất
+                var memoryStream = new MemoryStream();
+                await response.ResponseStream.CopyToAsync(memoryStream);
+                memoryStream.Position = 0;
                 
-                return response.ResponseStream;
+                _logger.LogInformation($"[S3FileStorage] Download successful - StoreName: {storeName}, Size: {memoryStream.Length}");
+                
+                return memoryStream;
             }
             catch (Exception ex)
             {
