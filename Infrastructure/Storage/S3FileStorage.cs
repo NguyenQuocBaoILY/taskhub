@@ -116,11 +116,8 @@ namespace Infrastructure.Storage
                     BucketName = _bucketName,
                     Key = storeName,
                     Verb = HttpVerb.GET,
-                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration),
-                    ResponseHeaderOverrides = new ResponseHeaderOverrides
-                    {
-                        ContentDisposition = $"attachment; filename=\"{fileName}\""
-                    }
+                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration)
+                    // Bỏ ResponseHeaderOverrides để tránh lỗi download 0 byte
                 };
 
                 var url = await _s3.GetPreSignedURLAsync(request);
