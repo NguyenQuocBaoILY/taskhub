@@ -9,5 +9,6 @@ namespace Infrastructure.Storage
         Task<bool> DeleteAsync(string storeName);
         string GetUrl(string storeName);
         Task<Stream> DownloadAsync(string storeName);
+        Task<string> GetPreSignedDownloadUrlAsync(string storeName, string fileName, int expirationMinutes = 15);
     }
 }

@@ -17,7 +17,7 @@ build_backend:
 
     - echo "Publishing..."
     - if (Test-Path $env:PUBLISH_DIR) { Remove-Item -Recurse -Force $env:PUBLISH_DIR }
-    - dotnet publish $env:PROJECT_PATH -c Release -o $env:PUBLISH_DIR
+    - dotnet publish $env:PROJECT_PATH -c Release -o $env:PUBLISH_DIR --verbosity quiet --nologo /p:TreatWarningsAsErrors=false
 
     - echo "Creating ZIP..."
     - if (Test-Path $env:ZIP_FILE) { Remove-Item -Force $env:ZIP_FILE }
