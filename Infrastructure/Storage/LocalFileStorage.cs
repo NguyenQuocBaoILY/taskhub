@@ -197,5 +197,11 @@ namespace Infrastructure.Storage
                 throw;
             }
         }
+
+        public Task<string> GetPreSignedDownloadUrlAsync(string storeName, string fileName, int expirationMinutes = 15)
+        {
+            var url = GetUrl(storeName);
+            return Task.FromResult(url);
+        }
     }
 }
