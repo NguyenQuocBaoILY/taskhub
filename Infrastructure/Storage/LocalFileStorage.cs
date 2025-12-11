@@ -176,5 +176,26 @@ namespace Infrastructure.Storage
             var baseUrl = _configuration["FileUpload:BaseUrl"] ?? "/uploads";
             return $"{baseUrl}/{storeName}";
         }
+
+        public async Task<Stream> DownloadAsync(string storeName)
+        {
+            try
+            {
+                if (string.IsNullOrWhiteSpace(storeName))
+                    throw new ArgumentException("storeName required");
+                
+                var fullPath = Path.Combine(_uploadsPath, storeName);
+                if (!File.Exists(fullPath))
+                    throw new FileNotFoundException($"File not found: {storeName}");
+                
+                _logger.LogInformation($"Downloading file: {storeName}");
+                return new FileStream(fullPath, FileMode.Open, FileAccess.Read);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"Failed to download file: {storeName}");
+                throw;
+            }
+        }
     }
 }

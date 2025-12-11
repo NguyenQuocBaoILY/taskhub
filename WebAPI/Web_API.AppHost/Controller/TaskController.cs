@@ -309,6 +309,53 @@ namespace WebAPI.APPHost.Controllers
         }
 
 
+        [HttpGet("{taskId}/files/{fileId}/download")]
+        public async Task<IActionResult> DownloadFile(
+            [FromRoute] string taskId,
+            [FromRoute] string fileId,
+            [FromQuery] string projectId,
+            [FromQuery] string userId)
+        {
+            if (string.IsNullOrEmpty(taskId) || string.IsNullOrEmpty(fileId))
+                return BadRequest("taskId & fileId required");
+
+            var file = await _taskFileService.GetFileAsync(fileId);
+            if (file == null)
+                return NotFound("File not found");
+
+            if (file.TaskId != taskId)
+                return NotFound("File does not belong to this task");
+
+            // Check permissions
+            if (!isAdmin())
+            {
+                if (string.IsNullOrEmpty(projectId) || string.IsNullOrEmpty(userId))
+                    return BadRequest("projectId & userId required for non-admin");
+
+                var member = await _memberService.GetProjectMemberAsync(projectId, userId);
+                if (member == null)
+                    return Forbid();
+
+                var task = await _taskService.GetTaskAsync(projectId, taskId);
+                if (task == null)
+                    return NotFound("Task not found");
+
+                if (!isManager(member) && !isAssignee(task, userId))
+                    return Forbid();
+            }
+
+            try
+            {
+                var fileStream = await _taskFileService.DownloadAsync(fileId);
+                return File(fileStream, file.ContentType ?? "application/octet-stream", file.FileName);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Download error: {ex.Message}");
+                return NotFound("File not found in storage");
+            }
+        }
+
         [HttpDelete("{taskId}/files/{fileId}")]
         public async Task<IActionResult> DeleteFile(
             [FromRoute] string taskId,

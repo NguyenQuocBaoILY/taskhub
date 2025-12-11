@@ -81,5 +81,17 @@ namespace BLL.Services
                 ? Task.FromResult<TaskFileModel>(null)
                 : _repo.GetFileAsync(fileId);
         }
+
+        public async Task<Stream> DownloadAsync(string fileId)
+        {
+            if (string.IsNullOrWhiteSpace(fileId))
+                throw new ArgumentException("fileId required");
+
+            var file = await _repo.GetFileAsync(fileId);
+            if (file == null)
+                throw new FileNotFoundException("File not found");
+
+            return await _storage.DownloadAsync(file.StoreName);
+        }
     }
 }

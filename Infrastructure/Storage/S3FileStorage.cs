@@ -71,5 +71,30 @@ namespace Infrastructure.Storage
         {
             return $"https://{_bucketName}.s3.ap-southeast-1.amazonaws.com/{storeName}";
         }
+
+        public async Task<Stream> DownloadAsync(string storeName)
+        {
+            try
+            {
+                _logger.LogInformation($"[S3FileStorage] Starting download - StoreName: {storeName}, Bucket: {_bucketName}");
+
+                var request = new GetObjectRequest
+                {
+                    BucketName = _bucketName,
+                    Key = storeName
+                };
+
+                var response = await _s3.GetObjectAsync(request);
+                
+                _logger.LogInformation($"[S3FileStorage] Download successful - StoreName: {storeName}");
+                
+                return response.ResponseStream;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"[S3FileStorage] Download failed - StoreName: {storeName}, Bucket: {_bucketName}");
+                throw;
+            }
+        }
     }
 }

@@ -8,5 +8,6 @@ namespace Infrastructure.Storage
         Task<(string storeName, string url, long size)> SaveAsync(Stream stream, string originalFileName, string contentType);
         Task<bool> DeleteAsync(string storeName);
         string GetUrl(string storeName);
+        Task<Stream> DownloadAsync(string storeName);
     }
 }
