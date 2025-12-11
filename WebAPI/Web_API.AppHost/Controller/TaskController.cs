@@ -346,14 +346,12 @@ namespace WebAPI.APPHost.Controllers
 
             try
             {
-                var fileStream = await _taskFileService.DownloadAsync(fileId);
+                // Trả về pre-signed URL thay vì stream file
+                var preSignedUrl = await _taskFileService.GetPreSignedUrlAsync(fileId);
                 
-                // Đảm bảo content-type đúng và thêm headers cần thiết
-                var contentType = file.ContentType ?? "application/octet-stream";
+                Console.WriteLine($"[Download] Generated secure URL for file: {file.FileName}");
                 
-                Console.WriteLine($"[Download] File: {file.FileName}, ContentType: {contentType}, Size: {fileStream.Length}");
-                
-                return File(fileStream, contentType, file.FileName, enableRangeProcessing: true);
+                return Ok(new { downloadUrl = preSignedUrl });
             }
             catch (Exception ex)
             {

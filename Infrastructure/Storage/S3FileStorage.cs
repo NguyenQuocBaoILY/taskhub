@@ -103,5 +103,36 @@ namespace Infrastructure.Storage
                 throw;
             }
         }
+
+        public async Task<string> GetPreSignedDownloadUrlAsync(string storeName, string fileName, int expirationMinutes = 15)
+        {
+            try
+            {
+                // Giới hạn thời gian tối đa 1 giờ để bảo mật
+                var safeExpiration = Math.Min(expirationMinutes, 60);
+                
+                var request = new GetPreSignedUrlRequest
+                {
+                    BucketName = _bucketName,
+                    Key = storeName,
+                    Verb = HttpVerb.GET,
+                    Expires = DateTime.UtcNow.AddMinutes(safeExpiration),
+                    ResponseHeaderOverrides = new ResponseHeaderOverrides
+                    {
+                        ContentDisposition = $"attachment; filename=\"{fileName}\""
+                    }
+                };
+
+                var url = await _s3.GetPreSignedURLAsync(request);
+                // KHÔNG log URL để tránh rủi ro bảo mật
+                _logger.LogInformation($"[S3FileStorage] Generated secure pre-signed URL for file, expires in {safeExpiration} minutes");
+                return url;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, $"[S3FileStorage] Failed to generate pre-signed URL for {storeName}");
+                throw;
+            }
+        }
     }
 }
