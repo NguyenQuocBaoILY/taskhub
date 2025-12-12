@@ -1,93 +1,298 @@
-# TaskHub_Backend
+# TaskHub Backend
 
+Backend API for TaskHub project management application, built with .NET 8 and AWS services.
 
+## Table of Contents
 
-## Getting started
+- [Technologies Used](#technologies-used)
+- [Project Architecture](#project-architecture)
+- [System Requirements](#system-requirements)
+- [Installation and Running the Project](#installation-and-running-the-project)
+- [Configuration](#configuration)
+- [API Endpoints](#api-endpoints)
+- [Deployment](#deployment)
 
-To make it easy for you to get started with GitLab, here's a list of recommended next steps.
+## Technologies Used
 
-Already a pro? Just edit this README.md and make it your own. Want to make it easy? [Use the template at the bottom](#editing-this-readme)!
+### Language & Framework
+- **C# / .NET 8.0** - Main programming language
+- **ASP.NET Core Web API** - REST API framework
+- **Entity Framework Core 9.0** - ORM
 
-## Add your files
+### AWS Services
+- **AWS Lambda** - Serverless compute (production deployment)
+- **Amazon DynamoDB** - NoSQL Database
+- **Amazon S3** - File storage (uploads)
+- **Amazon Cognito** - User authentication
+- **AWS Secrets Manager** - Secrets/credentials management
 
-- [ ] [Create](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#create-a-file) or [upload](https://docs.gitlab.com/ee/user/project/repository/web_editor.html#upload-a-file) files
-- [ ] [Add files using the command line](https://docs.gitlab.com/topics/git/add_files/#add-files-to-a-git-repository) or push an existing Git repository with the following command:
+### Authentication & Security
+- **JWT (JSON Web Token)** - Token-based authentication
+- **Google OAuth 2.0** - Google login
+- **BCrypt** - Password encryption
+
+### Other Tools
+- **Swagger/OpenAPI** - API documentation
+- **GitLab CI/CD** - Automated build and deployment
+
+## Project Architecture
 
 ```
-cd existing_repo
-git remote add origin https://gitlab.com/taskhub_group/taskhub_backend.git
-git branch -M main
-git push -uf origin main
+taskhub_backend/
+├── WebAPI/
+│   └── Web_API.AppHost/          # API Layer - Controllers & Entry points
+│       ├── Controller/           # API Controllers
+│       ├── Program.cs            # Application startup
+│       ├── appsettings.json      # Configuration
+│       └── wwwroot/uploads/      # Local file storage
+│
+├── BLL/                          # Business Logic Layer
+│   ├── DTOs/                     # Data Transfer Objects
+│   └── Services/                 # Business Services
+│
+├── DAL/                          # Data Access Layer
+│   ├── Entities/                 # Database Models
+│   ├── Interfaces/               # Repository Interfaces
+│   └── Repositories/             # Repository Implementations
+│
+├── Infrastructure/               # Infrastructure Layer
+│   └── Storage/                  # File Storage (Local/S3)
+│
+└── Taskhub.sln                   # Solution file
 ```
 
-## Integrate with your tools
+## System Requirements
 
-- [ ] [Set up project integrations](https://gitlab.com/taskhub_group/taskhub_backend/-/settings/integrations)
+### Required
+- **.NET 8.0 SDK** or higher
+- **Visual Studio 2022** or **VS Code** with C# extension
+- **Git**
 
-## Collaborate with your team
+### Optional (for local development)
+- **AWS CLI** - If you want to test with AWS services
+- **DynamoDB Local** - If you want to test database locally
 
-- [ ] [Invite team members and collaborators](https://docs.gitlab.com/ee/user/project/members/)
-- [ ] [Create a new merge request](https://docs.gitlab.com/ee/user/project/merge_requests/creating_merge_requests.html)
-- [ ] [Automatically close issues from merge requests](https://docs.gitlab.com/ee/user/project/issues/managing_issues.html#closing-issues-automatically)
-- [ ] [Enable merge request approvals](https://docs.gitlab.com/ee/user/project/merge_requests/approvals/)
-- [ ] [Set auto-merge](https://docs.gitlab.com/user/project/merge_requests/auto_merge/)
+## Installation and Running the Project
 
-## Test and Deploy
+### Step 1: Clone repository
 
-Use the built-in continuous integration in GitLab.
+```bash
+git clone https://gitlab.com/taskhub_group/taskhub_backend.git
+cd taskhub_backend
+```
 
-- [ ] [Get started with GitLab CI/CD](https://docs.gitlab.com/ee/ci/quick_start/)
-- [ ] [Analyze your code for known vulnerabilities with Static Application Security Testing (SAST)](https://docs.gitlab.com/ee/user/application_security/sast/)
-- [ ] [Deploy to Kubernetes, Amazon EC2, or Amazon ECS using Auto Deploy](https://docs.gitlab.com/ee/topics/autodevops/requirements.html)
-- [ ] [Use pull-based deployments for improved Kubernetes management](https://docs.gitlab.com/ee/user/clusters/agent/)
-- [ ] [Set up protected environments](https://docs.gitlab.com/ee/ci/environments/protected_environments.html)
+### Step 2: Install .NET SDK
 
-***
+Download and install .NET 8.0 SDK from: https://dotnet.microsoft.com/download/dotnet/8.0
 
-# Editing this README
+Verify installation:
+```bash
+dotnet --version
+```
 
-When you're ready to make this README your own, just edit this file and use the handy template below (or feel free to structure it however you want - this is just a starting point!). Thanks to [makeareadme.com](https://www.makeareadme.com/) for this template.
+### Step 3: Restore packages
 
-## Suggestions for a good README
+```bash
+dotnet restore
+```
 
-Every project is different, so consider which of these sections apply to yours. The sections used in the template are suggestions for most open source projects. Also keep in mind that while a README can be too long and detailed, too long is better than too short. If you think your README is too long, consider utilizing another form of documentation rather than cutting out information.
+### Step 4: Configure appsettings
 
-## Name
-Choose a self-explaining name for your project.
+Open `WebAPI/Web_API.AppHost/appsettings.json` and update the following values:
 
-## Description
-Let people know what your project can do specifically. Provide context and add a link to any reference visitors might be unfamiliar with. A list of Features or a Background subsection can also be added here. If there are alternatives to your project, this is a good place to list differentiating factors.
+```json
+{
+  "AWS": {
+    "Region": "ap-southeast-1",
+    "AccessKey": "YOUR_AWS_ACCESS_KEY",
+    "SecretKey": "YOUR_AWS_SECRET_KEY",
+    "S3": {
+      "BucketName": "your-s3-bucket-name"
+    },
+    "Cognito": {
+      "UserPoolId": "YOUR_USER_POOL_ID",
+      "ClientId": "YOUR_CLIENT_ID",
+      "ClientSecret": "YOUR_CLIENT_SECRET"
+    }
+  },
+  "JWT": {
+    "SecretKey": "your-secret-key-at-least-32-characters-long",
+    "Issuer": "TaskHub",
+    "Audience": "TaskHub"
+  },
+  "GoogleAuth": {
+    "ClientId": "YOUR_GOOGLE_CLIENT_ID",
+    "ClientSecret": "YOUR_GOOGLE_CLIENT_SECRET"
+  },
+  "Email": {
+    "SmtpHost": "smtp.gmail.com",
+    "SmtpPort": "587",
+    "FromName": "TaskHub",
+    "SmtpPassword": "YOUR_EMAIL_APP_PASSWORD"
+  },
+  "App": {
+    "FrontendUrl": "http://localhost:5173"
+  }
+}
+```
 
-## Badges
-On some READMEs, you may see small images that convey metadata, such as whether or not all the tests are passing for the project. You can use Shields to add some to your README. Many services also have instructions for adding a badge.
+### Step 5: Run the project
 
-## Visuals
-Depending on what you are making, it can be a good idea to include screenshots or even a video (you'll frequently see GIFs rather than actual videos). Tools like ttygif can help, but check out Asciinema for a more sophisticated method.
+#### Using CLI:
+```bash
+cd WebAPI/Web_API.AppHost
+dotnet run
+```
 
-## Installation
-Within a particular ecosystem, there may be a common way of installing things, such as using Yarn, NuGet, or Homebrew. However, consider the possibility that whoever is reading your README is a novice and would like more guidance. Listing specific steps helps remove ambiguity and gets people to using your project as quickly as possible. If it only runs in a specific context like a particular programming language version or operating system or has dependencies that have to be installed manually, also add a Requirements subsection.
+#### Using Visual Studio:
+1. Open `Taskhub.sln` file
+2. Set `API` project as Startup Project
+3. Press `F5` or click **Run** button
 
-## Usage
-Use examples liberally, and show the expected output if you can. It's helpful to have inline the smallest example of usage that you can demonstrate, while providing links to more sophisticated examples if they are too long to reasonably include in the README.
+#### Using VS Code:
+1. Open project folder in VS Code
+2. Open Terminal and run:
+```bash
+dotnet run --project WebAPI/Web_API.AppHost/API.csproj
+```
 
-## Support
-Tell people where they can go to for help. It can be any combination of an issue tracker, a chat room, an email address, etc.
+### Step 6: Access API
 
-## Roadmap
-If you have ideas for releases in the future, it is a good idea to list them in the README.
+- **Swagger UI**: https://localhost:5001/swagger or http://localhost:5000/swagger
+- **API Base URL**: https://localhost:5001 or http://localhost:5000
+
+## Configuration
+
+### Development Environment
+
+`appsettings.Development.json` file is used when running in development environment:
+
+```json
+{
+  "AWS": {
+    "UseDynamoDbLocal": false,
+    "Region": "ap-southeast-1"
+  }
+}
+```
+
+### Production Environment
+
+`appsettings.Production.json` file is used during deployment:
+- Uses AWS Secrets Manager to store credentials
+- Uses Lambda IAM Role instead of Access Keys
+
+### Environment Variables
+
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `ASPNETCORE_ENVIRONMENT` | Environment (Development/Production) | Yes |
+| `AWS_ACCESS_KEY_ID` | AWS Access Key | Yes (Dev) |
+| `AWS_SECRET_ACCESS_KEY` | AWS Secret Key | Yes (Dev) |
+| `AWS_DEFAULT_REGION` | AWS Region | Yes |
+
+## API Endpoints
+
+### Authentication
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| POST | `/api/auth/register` | Register account |
+| POST | `/api/auth/login` | Login |
+| POST | `/api/auth/google` | Login with Google |
+| POST | `/api/auth/refresh-token` | Refresh token |
+| POST | `/api/auth/forgot-password` | Forgot password |
+| POST | `/api/auth/reset-password` | Reset password |
+
+### Projects
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/projects` | Get project list |
+| GET | `/api/projects/{id}` | Get project details |
+| POST | `/api/projects` | Create new project |
+| PUT | `/api/projects/{id}` | Update project |
+| DELETE | `/api/projects/{id}` | Delete project |
+
+### Tasks
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/tasks` | Get task list |
+| GET | `/api/tasks/{id}` | Get task details |
+| POST | `/api/tasks` | Create new task |
+| PUT | `/api/tasks/{id}` | Update task |
+| PATCH | `/api/tasks/{id}/status` | Update task status |
+| DELETE | `/api/tasks/{id}` | Delete task |
+
+### Project Members
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| GET | `/api/projects/{id}/members` | Get member list |
+| POST | `/api/projects/{id}/members` | Add member |
+| DELETE | `/api/projects/{id}/members/{userId}` | Remove member |
+
+## Deployment
+
+### Deploy to AWS Lambda
+
+The project uses GitLab CI/CD for automatic deployment:
+
+1. Push code to `main` branch
+2. GitLab CI will automatically:
+   - Build project
+   - Publish and package as ZIP file
+   - Deploy to AWS Lambda
+
+### Manual Deploy
+
+```bash
+# Build and publish
+dotnet publish WebAPI/Web_API.AppHost/API.csproj -c Release -o publish
+
+# Create ZIP file
+Compress-Archive -Path publish/* -DestinationPath backend.zip
+
+# Deploy to Lambda (requires AWS CLI)
+aws lambda update-function-code --function-name YOUR_LAMBDA_NAME --zip-file fileb://backend.zip --region ap-southeast-1
+```
+
+## Troubleshooting
+
+### Common Errors
+
+**1. DynamoDB connection error**
+```
+Check AWS credentials and region in appsettings.json
+```
+
+**2. CORS error**
+```
+Ensure FrontendUrl in appsettings.json matches frontend URL
+```
+
+**3. JWT error**
+```
+Ensure SecretKey has at least 32 characters length
+```
+
+**4. Email error**
+```
+Use Gmail App Password instead of regular password
+```
+
+## Notes
+
+- Project uses 3-tier architecture
+- API is protected by JWT Authentication
+- File uploads are stored on S3 (production) or local (development)
+- Uses DynamoDB as primary database
 
 ## Contributing
-State if you are open to contributions and what your requirements are for accepting them.
 
-For people who want to make changes to your project, it's helpful to have some documentation on how to get started. Perhaps there is a script that they should run or some environment variables that they need to set. Make these steps explicit. These instructions could also be useful to your future self.
-
-You can also document commands to lint the code or run tests. These steps help to ensure high code quality and reduce the likelihood that the changes inadvertently break something. Having instructions for running tests is especially helpful if it requires external setup, such as starting a Selenium server for testing in a browser.
-
-## Authors and acknowledgment
-Show your appreciation to those who have contributed to the project.
+1. Fork the repository
+2. Create new branch (`git checkout -b feature/AmazingFeature`)
+3. Commit changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to branch (`git push origin feature/AmazingFeature`)
+5. Create Pull Request
 
 ## License
-For open source projects, say how it is licensed.
 
-## Project status
-If you have run out of energy or time for your project, put a note at the top of the README saying that development has slowed down or stopped completely. Someone may choose to fork your project or volunteer to step in as a maintainer or owner, allowing your project to keep going. You can also make an explicit request for maintainers.
+© 2025 TaskHub. All rights reserved.
